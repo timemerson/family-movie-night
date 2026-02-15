@@ -7,3 +7,14 @@ DerivedData/
 *.xcuserstate
 *.xccheckout
 *.xcscmblueprint
+
+# Node.js
+node_modules/
+dist/
+
+# CDK
+cdk.out/
+
+# Environment / secrets
+.env
+.env.*

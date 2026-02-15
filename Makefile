@@ -1,27 +1,39 @@
 SHELL := /bin/bash
 
-.PHONY: help setup lint test fmt ios backend
+.PHONY: help setup lint test fmt synth build ios backend
 
 help:
 	@echo "Targets:"
-	@echo "  setup      - install dev deps (placeholder)"
-	@echo "  lint       - run linters (backend + ios if configured)"
-	@echo "  test       - run tests (backend + ios if configured)"
-	@echo "  fmt        - format code (backend + ios if configured)"
+	@echo "  setup      - install all dependencies"
+	@echo "  lint       - run linters (backend)"
+	@echo "  test       - run tests (backend + CDK)"
+	@echo "  fmt        - check formatting (backend)"
+	@echo "  fmt-fix    - auto-fix formatting (backend)"
+	@echo "  synth      - synthesize CDK stacks"
+	@echo "  build      - bundle Lambda with esbuild"
 	@echo "  ios        - open iOS project (once created)"
 	@echo "  backend    - run backend locally (once created)"
 
 setup:
-	@echo "TODO: implement setup (brew bundles, npm/pip, etc.)"
+	cd backend && npm ci
 
 lint:
-	@echo "TODO: implement lint"
+	cd backend && npx eslint . --ext .ts
 
 test:
-	@echo "TODO: implement test"
+	cd backend && npx vitest run
 
 fmt:
-	@echo "TODO: implement formatting"
+	cd backend && npx prettier --check '**/*.ts'
+
+fmt-fix:
+	cd backend && npx prettier --write '**/*.ts'
+
+synth:
+	cd backend/cdk && npx cdk synth --context env=dev --quiet
+
+build:
+	cd backend && npm run build
 
 ios:
 	@echo "TODO: create ios project first"
