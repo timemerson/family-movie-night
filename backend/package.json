@@ -1,0 +1,40 @@
+{
+  "name": "family-movie-night-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --format=esm --external:@aws-sdk/*",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "fmt": "prettier --check '**/*.ts'",
+    "fmt:fix": "prettier --write '**/*.ts'",
+    "synth": "cd cdk && npx cdk synth --context env=dev",
+    "cdk:diff": "cd cdk && npx cdk diff --context env=dev"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0",
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.6.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^20.17.0",
+    "@types/source-map-support": "^0.5.10",
+    "aws-cdk": "^2.175.0",
+    "aws-cdk-lib": "^2.175.0",
+    "constructs": "^10.4.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.0",
+    "source-map-support": "^0.5.21",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.18.0",
+    "vitest": "^2.1.0"
+  }
+}
