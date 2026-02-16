@@ -77,6 +77,48 @@ describe("App integration", () => {
     });
   });
 
+  describe("Group routes reject unauthenticated requests", () => {
+    it("POST /groups returns 401 without auth", async () => {
+      const res = await unauthRequest("POST", "/groups");
+      expect(res.status).toBe(401);
+    });
+
+    it("GET /groups/g-1 returns 401 without auth", async () => {
+      const res = await unauthRequest("GET", "/groups/g-1");
+      expect(res.status).toBe(401);
+    });
+
+    it("POST /groups/g-1/invites returns 401 without auth", async () => {
+      const res = await unauthRequest("POST", "/groups/g-1/invites");
+      expect(res.status).toBe(401);
+    });
+
+    it("POST /invites/token/accept returns 401 without auth", async () => {
+      const res = await unauthRequest("POST", "/invites/token/accept");
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe("Group membership enforcement", () => {
+    it("GET /groups/:id returns 403 for non-member", async () => {
+      // getMembership returns nothing
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+
+      const res = await authedRequest("GET", "/groups/g-1");
+      expect(res.status).toBe(403);
+    });
+
+    it("POST /groups/:id/invites returns 403 for non-creator", async () => {
+      // requireCreator — user is member but not creator
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+
+      const res = await authedRequest("POST", "/groups/g-1/invites");
+      expect(res.status).toBe(403);
+    });
+  });
+
   describe("Global error handler", () => {
     it("returns structured error for HttpError", async () => {
       // Trigger a request that will exercise the error handler

@@ -1,0 +1,109 @@
+import SwiftUI
+
+struct GroupDetailView: View {
+    @ObservedObject var viewModel: GroupViewModel
+    @State private var showShareSheet = false
+    @State private var showLeaveConfirmation = false
+
+    private var group: Group { viewModel.group! }
+    private var isCreator: Bool {
+        group.members.first(where: { $0.isCreator })?.userId == nil // TODO: compare with current user ID
+    }
+
+    var body: some View {
+        List {
+            Section("Members (\(group.members.count)/8)") {
+                ForEach(group.members) { member in
+                    HStack {
+                        Text(member.displayName)
+                        Spacer()
+                        if member.isCreator {
+                            Text("Creator")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            Section {
+                Button("Share Invite Link") {
+                    Task {
+                        await viewModel.createInvite()
+                        if viewModel.currentInvite != nil {
+                            showShareSheet = true
+                        }
+                    }
+                }
+            }
+
+            if let error = viewModel.error {
+                Section {
+                    Text(error)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Section {
+                Button("Leave Group", role: .destructive) {
+                    showLeaveConfirmation = true
+                }
+            }
+        }
+        .navigationTitle(group.name)
+        .sheet(isPresented: $showShareSheet) {
+            if let invite = viewModel.currentInvite {
+                ShareInviteView(inviteUrl: invite.inviteUrl, inviteToken: invite.inviteToken)
+            }
+        }
+        .confirmationDialog(
+            "Leave Group?",
+            isPresented: $showLeaveConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Leave", role: .destructive) {
+                Task { await viewModel.leaveGroup() }
+            }
+        } message: {
+            Text("You'll need a new invite to rejoin.")
+        }
+    }
+}
+
+struct ShareInviteView: View {
+    let inviteUrl: String
+    let inviteToken: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Text("Share this code with your family:")
+                    .font(.headline)
+
+                Text(inviteToken)
+                    .font(.system(.title2, design: .monospaced))
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+
+                Button("Copy Invite Link") {
+                    UIPasteboard.general.string = inviteUrl
+                }
+                .buttonStyle(.borderedProminent)
+
+                Text("The invite expires in 7 days.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .navigationTitle("Invite Link")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
