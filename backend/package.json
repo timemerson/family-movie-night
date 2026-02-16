@@ -1,0 +1,27 @@
+{
+  "name": "family-movie-night-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc",
+    "synth": "cd cdk && npx cdk synth",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.990.0",
+    "@aws-sdk/lib-dynamodb": "^3.990.0",
+    "hono": "^4.11.9",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.33",
+    "aws-cdk": "^2.1106.0",
+    "aws-cdk-lib": "^2.238.0",
+    "constructs": "^10.4.5",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

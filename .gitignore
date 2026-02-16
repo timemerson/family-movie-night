@@ -7,3 +7,10 @@ DerivedData/
 *.xcuserstate
 *.xccheckout
 *.xcscmblueprint
+
+# Node
+node_modules/
+
+# Backend build artifacts
+backend/dist/
+backend/cdk/cdk.out/
