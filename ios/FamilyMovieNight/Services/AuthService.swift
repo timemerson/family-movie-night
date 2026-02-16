@@ -64,7 +64,7 @@ class AuthService: ObservableObject {
         let session = try await Amplify.Auth.fetchAuthSession()
         if let cognitoSession = session as? AuthCognitoTokensProvider {
             let tokens = try cognitoSession.getCognitoTokens().get()
-            self.accessToken = tokens.accessToken
+            self.accessToken = tokens.idToken
         }
         let user = try await Amplify.Auth.getCurrentUser()
         self.userId = user.userId
