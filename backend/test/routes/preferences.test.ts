@@ -121,6 +121,72 @@ describe("Preference routes", () => {
     });
   });
 
+  describe("GET /groups/:group_id/preferences/summary", () => {
+    it("returns 200 with computed summary", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // QueryCommand — group preferences
+      mockSendFn.mockResolvedValueOnce({
+        Items: [
+          {
+            group_id: "g-1",
+            user_id: "user-123",
+            genre_likes: ["28", "35"],
+            genre_dislikes: ["27"],
+            max_content_rating: "PG-13",
+            updated_at: "2026-02-14T00:00:00Z",
+          },
+          {
+            group_id: "g-1",
+            user_id: "user-456",
+            genre_likes: ["35", "16"],
+            genre_dislikes: ["27"],
+            max_content_rating: "PG",
+            updated_at: "2026-02-14T00:00:00Z",
+          },
+        ],
+      });
+
+      const res = await makeRequest("GET", "/groups/g-1/preferences/summary");
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.liked_genres.sort()).toEqual(["16", "28", "35"]);
+      expect(body.disliked_genres).toEqual(["27"]);
+      expect(body.max_content_rating).toBe("PG");
+      expect(body.member_count).toBe(2);
+    });
+
+    it("returns 403 for non-member", async () => {
+      // requireMember — not found
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+
+      const res = await makeRequest("GET", "/groups/g-1/preferences/summary");
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 200 with empty result when no preferences set", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // QueryCommand — no items
+      mockSendFn.mockResolvedValueOnce({ Items: [] });
+
+      const res = await makeRequest("GET", "/groups/g-1/preferences/summary");
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.liked_genres).toEqual([]);
+      expect(body.disliked_genres).toEqual([]);
+      expect(body.max_content_rating).toBeNull();
+      expect(body.member_count).toBe(0);
+    });
+  });
+
   describe("PUT /groups/:group_id/preferences", () => {
     it("saves valid preferences and returns 200", async () => {
       // requireMember

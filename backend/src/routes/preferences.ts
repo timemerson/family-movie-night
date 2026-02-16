@@ -45,6 +45,20 @@ preferences.get("/groups/:group_id/preferences", async (c) => {
   return c.json(prefs);
 });
 
+// GET /groups/:group_id/preferences/summary — aggregated group preferences
+preferences.get("/groups/:group_id/preferences/summary", async (c) => {
+  const userId = c.get("userId") as string;
+  const groupId = c.req.param("group_id");
+
+  const groupService = getGroupService();
+  await groupService.requireMember(groupId, userId);
+
+  const preferenceService = getPreferenceService();
+  const summary = await preferenceService.getGroupPreferenceSummary(groupId);
+
+  return c.json(summary);
+});
+
 // PUT /groups/:group_id/preferences — set or replace preferences
 preferences.put("/groups/:group_id/preferences", async (c) => {
   const userId = c.get("userId") as string;
