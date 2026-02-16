@@ -4,6 +4,7 @@ import { authMiddleware } from "./middleware/auth.js";
 import { users } from "./routes/users.js";
 import { groups } from "./routes/groups.js";
 import { preferences } from "./routes/preferences.js";
+import { picks } from "./routes/picks.js";
 import { HttpError } from "./lib/errors.js";
 
 const app = new Hono();
@@ -18,6 +19,7 @@ app.use("/*", authMiddleware());
 app.route("/", users);
 app.route("/", groups);
 app.route("/", preferences);
+app.route("/", picks);
 
 // Global error handler
 app.onError((err, c) => {
