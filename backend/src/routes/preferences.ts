@@ -49,15 +49,15 @@ preferences.get("/groups/:group_id/preferences", async (c) => {
 preferences.put("/groups/:group_id/preferences", async (c) => {
   const userId = c.get("userId") as string;
   const groupId = c.req.param("group_id");
-  const body = await c.req.json();
 
+  const groupService = getGroupService();
+  await groupService.requireMember(groupId, userId);
+
+  const body = await c.req.json();
   const parsed = PutPreferenceSchema.safeParse(body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.issues[0].message);
   }
-
-  const groupService = getGroupService();
-  await groupService.requireMember(groupId, userId);
 
   const preferenceService = getPreferenceService();
   const prefs = await preferenceService.putPreferences(

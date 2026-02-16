@@ -17,10 +17,6 @@ class PreferencesViewModel: ObservableObject {
         genreLikes.count >= 2
     }
 
-    var hasOverlap: Bool {
-        !genreLikes.isDisjoint(with: genreDislikes)
-    }
-
     func configure(apiClient: APIClient, groupId: String) {
         guard self.apiClient == nil else { return }
         self.apiClient = apiClient

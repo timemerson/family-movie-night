@@ -169,6 +169,11 @@ describe("Preference routes", () => {
     });
 
     it("returns 400 when genre_likes has fewer than 2 entries", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+
       const res = await makeRequest("PUT", "/groups/g-1/preferences", {
         body: {
           genre_likes: ["28"],
@@ -180,6 +185,11 @@ describe("Preference routes", () => {
     });
 
     it("returns 400 when genre_likes is empty", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+
       const res = await makeRequest("PUT", "/groups/g-1/preferences", {
         body: {
           genre_likes: [],
@@ -191,6 +201,11 @@ describe("Preference routes", () => {
     });
 
     it("returns 400 when genre_likes and genre_dislikes overlap", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+
       const res = await makeRequest("PUT", "/groups/g-1/preferences", {
         body: {
           genre_likes: ["28", "35"],
@@ -205,6 +220,11 @@ describe("Preference routes", () => {
     });
 
     it("returns 400 for invalid content rating", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+
       const res = await makeRequest("PUT", "/groups/g-1/preferences", {
         body: {
           genre_likes: ["28", "35"],
@@ -216,6 +236,11 @@ describe("Preference routes", () => {
     });
 
     it("returns 400 when max_content_rating is missing", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+
       const res = await makeRequest("PUT", "/groups/g-1/preferences", {
         body: {
           genre_likes: ["28", "35"],
@@ -223,6 +248,44 @@ describe("Preference routes", () => {
       });
 
       expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when genre_likes has duplicates that reduce count below 2", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+
+      const res = await makeRequest("PUT", "/groups/g-1/preferences", {
+        body: {
+          genre_likes: ["28", "28"],
+          max_content_rating: "PG",
+        },
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("deduplicates genre_likes and genre_dislikes before saving", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // PutCommand
+      mockSendFn.mockResolvedValueOnce({});
+
+      const res = await makeRequest("PUT", "/groups/g-1/preferences", {
+        body: {
+          genre_likes: ["28", "35", "28"],
+          genre_dislikes: ["27", "27"],
+          max_content_rating: "PG",
+        },
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.genre_likes).toEqual(["28", "35"]);
+      expect(body.genre_dislikes).toEqual(["27"]);
     });
 
     it("returns 403 for non-member", async () => {

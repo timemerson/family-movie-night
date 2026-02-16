@@ -4,8 +4,16 @@ const VALID_RATINGS = ["G", "PG", "PG-13", "R"] as const;
 
 export const PutPreferenceSchema = z
   .object({
-    genre_likes: z.array(z.string().min(1).max(10)).min(2).max(20),
-    genre_dislikes: z.array(z.string().min(1).max(10)).max(20).default([]),
+    genre_likes: z
+      .array(z.string().min(1).max(10))
+      .max(20)
+      .transform((arr) => [...new Set(arr)])
+      .pipe(z.array(z.string()).min(2)),
+    genre_dislikes: z
+      .array(z.string().min(1).max(10))
+      .max(20)
+      .transform((arr) => [...new Set(arr)])
+      .default([]),
     max_content_rating: z.enum(VALID_RATINGS),
   })
   .refine(
