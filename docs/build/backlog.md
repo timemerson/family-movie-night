@@ -21,6 +21,13 @@ Use this as a lightweight issue tracker if not using GitHub Issues yet.
 ### Task 02 — iOS app skeleton + auth wiring
 - [x] (done) iOS app skeleton + auth wiring
   - Merged 2026-02-15 (PR #5). Delivered: Cognito User Pool + Apple IdP federation, HTTP API Gateway with JWT Authorizer, `POST /auth/me` (JIT provisioning) + `DELETE /auth/account`, iOS project scaffold with Amplify Auth, Sign in with Apple + email/password flows, auth state management.
+- [ ] (ready) **02-A: Handle Amplify config failure gracefully** — P1
+- [ ] (ready) **02-B: Handle confirmSignUp success + signIn failure** — P1
+- [ ] (ready) **02-C: Handle MFA / challenge flows** — P2
+- [ ] (ready) **02-D: Atomic state update in fetchTokensAndUser** — P2
+- [ ] (ready) **02-E: Environment-specific Amplify config** — P2
+
+See [task-02-followups.md](task-02-followups.md) for full details on each follow-up.
 
 ---
 
