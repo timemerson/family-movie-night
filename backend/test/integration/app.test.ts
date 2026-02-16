@@ -12,6 +12,7 @@ vi.mock("../../src/lib/dynamo.js", () => {
   };
 });
 
+// @ts-expect-error __mockSend is injected by vi.mock
 import { __mockSend as mockSend } from "../../src/lib/dynamo.js";
 const mockSendFn = mockSend as unknown as ReturnType<typeof vi.fn>;
 
@@ -41,7 +42,7 @@ describe("App integration", () => {
     it("returns 200 without authentication", async () => {
       const res = await unauthRequest("GET", "/health");
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.status).toBe("ok");
     });
   });
@@ -72,7 +73,7 @@ describe("App integration", () => {
 
       const res = await authedRequest("GET", "/users/me");
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.user_id).toBe("user-123");
     });
   });
@@ -142,7 +143,7 @@ describe("App integration", () => {
 
       const res = await authedRequest("GET", "/users/me");
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.error).toBe("Bad request");
     });
 
@@ -151,7 +152,7 @@ describe("App integration", () => {
 
       const res = await authedRequest("GET", "/users/me");
       expect(res.status).toBe(500);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.error).toBe("Internal server error");
     });
   });

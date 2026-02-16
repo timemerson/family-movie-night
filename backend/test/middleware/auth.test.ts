@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { Hono } from "hono";
 import { authMiddleware } from "../../src/middleware/auth.js";
+import type { AppEnv } from "../../src/middleware/auth.js";
 
 function createApp() {
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
   app.use("/*", authMiddleware());
   app.get("/test", (c) => {
     return c.json({
@@ -40,7 +41,7 @@ describe("authMiddleware", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.userId).toBe("user-abc");
     expect(body.email).toBe("test@example.com");
   });

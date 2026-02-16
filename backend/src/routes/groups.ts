@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { AppEnv } from "../middleware/auth.js";
 import { GroupService } from "../services/group-service.js";
 import { InviteService } from "../services/invite-service.js";
 import { UserService } from "../services/user-service.js";
@@ -6,7 +7,7 @@ import { getDocClient, tableName } from "../lib/dynamo.js";
 import { CreateGroupSchema, UpdateGroupSchema } from "../models/group.js";
 import { ValidationError, ConflictError } from "../lib/errors.js";
 
-const groups = new Hono();
+const groups = new Hono<AppEnv>();
 
 function getGroupService() {
   return new GroupService(
@@ -27,7 +28,7 @@ function getUserService() {
 
 // GET /groups/me — get the current user's group (or null)
 groups.get("/groups/me", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
 
   const groupService = getGroupService();
   const membership = await groupService.getUserGroup(userId);
@@ -42,8 +43,8 @@ groups.get("/groups/me", async (c) => {
 
 // POST /groups — create a new group
 groups.post("/groups", async (c) => {
-  const userId = c.get("userId") as string;
-  const email = c.get("email") as string;
+  const userId = c.get("userId");
+  const email = c.get("email");
   const body = await c.req.json();
 
   const parsed = CreateGroupSchema.safeParse(body);
@@ -74,7 +75,7 @@ groups.post("/groups", async (c) => {
 
 // GET /groups/:group_id — get group details (members only)
 groups.get("/groups/:group_id", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
 
   const groupService = getGroupService();
@@ -86,7 +87,7 @@ groups.get("/groups/:group_id", async (c) => {
 
 // PATCH /groups/:group_id — update group (creator only)
 groups.patch("/groups/:group_id", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
   const body = await c.req.json();
 
@@ -105,7 +106,7 @@ groups.patch("/groups/:group_id", async (c) => {
 // NOTE: This endpoint only allows a user to remove themselves (userId from JWT).
 // A future "kick member" endpoint should verify the caller is the group creator.
 groups.delete("/groups/:group_id/members/me", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
 
   const groupService = getGroupService();
@@ -116,7 +117,7 @@ groups.delete("/groups/:group_id/members/me", async (c) => {
 
 // POST /groups/:group_id/invites — create invite (creator only)
 groups.post("/groups/:group_id/invites", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
 
   const groupService = getGroupService();
@@ -139,7 +140,7 @@ groups.post("/groups/:group_id/invites", async (c) => {
 
 // GET /groups/:group_id/invites — list pending invites (creator only)
 groups.get("/groups/:group_id/invites", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
 
   const groupService = getGroupService();
@@ -160,7 +161,7 @@ groups.get("/groups/:group_id/invites", async (c) => {
 
 // DELETE /groups/:group_id/invites/:invite_id — revoke invite (creator only)
 groups.delete("/groups/:group_id/invites/:invite_id", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
   const inviteId = c.req.param("invite_id");
 
@@ -175,7 +176,7 @@ groups.delete("/groups/:group_id/invites/:invite_id", async (c) => {
 
 // POST /invites/:invite_token/accept — accept invite and join group
 groups.post("/invites/:invite_token/accept", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const token = c.req.param("invite_token");
 
   const inviteService = getInviteService();

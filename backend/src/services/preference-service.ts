@@ -92,7 +92,7 @@ export class PreferenceService {
       if (dislikedSet === null) {
         dislikedSet = memberDislikes;
       } else {
-        dislikedSet = new Set([...dislikedSet].filter((g) => memberDislikes.has(g)));
+        dislikedSet = new Set([...dislikedSet].filter((g: string) => memberDislikes.has(g)));
       }
     }
 

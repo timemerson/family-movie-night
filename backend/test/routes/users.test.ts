@@ -14,6 +14,7 @@ vi.mock("../../src/lib/dynamo.js", () => {
 });
 
 // Get the mocked send function
+// @ts-expect-error __mockSend is injected by vi.mock
 import { __mockSend as mockSend } from "../../src/lib/dynamo.js";
 const mockSendFn = mockSend as unknown as ReturnType<typeof vi.fn>;
 
@@ -65,7 +66,7 @@ describe("User routes", () => {
       const res = await makeRequest("GET", "/users/me");
       expect(res.status).toBe(200);
 
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.user_id).toBe("user-123");
       expect(body.email).toBe("test@example.com");
     });
@@ -77,7 +78,7 @@ describe("User routes", () => {
       const res = await makeRequest("GET", "/users/me");
       expect(res.status).toBe(200);
 
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.user_id).toBe("user-123");
       expect(body.email).toBe("test@example.com");
       expect(body.display_name).toBe("test");

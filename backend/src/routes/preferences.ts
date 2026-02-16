@@ -1,11 +1,12 @@
 import { Hono } from "hono";
+import type { AppEnv } from "../middleware/auth.js";
 import { GroupService } from "../services/group-service.js";
 import { PreferenceService } from "../services/preference-service.js";
 import { getDocClient, tableName } from "../lib/dynamo.js";
 import { PutPreferenceSchema } from "../models/preference.js";
 import { ValidationError } from "../lib/errors.js";
 
-const preferences = new Hono();
+const preferences = new Hono<AppEnv>();
 
 function getGroupService() {
   return new GroupService(
@@ -22,7 +23,7 @@ function getPreferenceService() {
 
 // GET /groups/:group_id/preferences — get current user's preferences
 preferences.get("/groups/:group_id/preferences", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
 
   const groupService = getGroupService();
@@ -47,7 +48,7 @@ preferences.get("/groups/:group_id/preferences", async (c) => {
 
 // GET /groups/:group_id/preferences/summary — aggregated group preferences
 preferences.get("/groups/:group_id/preferences/summary", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
 
   const groupService = getGroupService();
@@ -61,7 +62,7 @@ preferences.get("/groups/:group_id/preferences/summary", async (c) => {
 
 // PUT /groups/:group_id/preferences — set or replace preferences
 preferences.put("/groups/:group_id/preferences", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
 
   const groupService = getGroupService();

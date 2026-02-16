@@ -1,9 +1,10 @@
 import { Hono } from "hono";
+import type { AppEnv } from "../middleware/auth.js";
 import { GroupService } from "../services/group-service.js";
 import { PickService } from "../services/pick-service.js";
 import { getDocClient, tableName } from "../lib/dynamo.js";
 
-const picks = new Hono();
+const picks = new Hono<AppEnv>();
 
 function getGroupService() {
   return new GroupService(
@@ -24,7 +25,7 @@ function getPickService() {
 
 // POST /groups/:group_id/picks/:pick_id/watched — mark a pick as watched
 picks.post("/groups/:group_id/picks/:pick_id/watched", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
   const pickId = c.req.param("pick_id");
 
@@ -39,7 +40,7 @@ picks.post("/groups/:group_id/picks/:pick_id/watched", async (c) => {
 
 // GET /groups/:group_id/watched — get watched movie IDs for a group
 picks.get("/groups/:group_id/watched", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
 
   const groupService = getGroupService();
