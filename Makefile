@@ -4,7 +4,7 @@ SHELL := /bin/bash
 
 help:
 	@echo "Targets:"
-	@echo "  setup      - install dev deps (placeholder)"
+	@echo "  setup      - install dev deps"
 	@echo "  lint       - run linters (backend + ios if configured)"
 	@echo "  test       - run tests (backend + ios if configured)"
 	@echo "  fmt        - format code (backend + ios if configured)"
@@ -12,19 +12,19 @@ help:
 	@echo "  backend    - run backend locally (once created)"
 
 setup:
-	@echo "TODO: implement setup (brew bundles, npm/pip, etc.)"
+	cd backend && npm install
 
 lint:
 	@echo "TODO: implement lint"
 
 test:
-	@echo "TODO: implement test"
+	cd backend && npx vitest run
 
 fmt:
 	@echo "TODO: implement formatting"
 
 ios:
-	@echo "TODO: create ios project first"
+	@echo "TODO: create ios project first (requires .xcodeproj via Xcode or xcodegen)"
 
 backend:
 	@echo "TODO: create backend first"
