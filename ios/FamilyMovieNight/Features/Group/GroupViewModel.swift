@@ -8,7 +8,7 @@ class GroupViewModel: ObservableObject {
     @Published var currentInvite: InviteResponse?
 
     private(set) var currentUserId: String?
-    private var apiClient: APIClient?
+    private(set) var apiClient: APIClient?
 
     func configure(apiClient: APIClient, currentUserId: String) {
         guard self.apiClient == nil else { return }

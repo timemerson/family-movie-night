@@ -49,6 +49,7 @@ export class ApiStack extends cdk.Stack {
     dataStack.groupsTable.grantReadWriteData(this.handler);
     dataStack.groupMembershipsTable.grantReadWriteData(this.handler);
     dataStack.invitesTable.grantReadWriteData(this.handler);
+    dataStack.preferencesTable.grantReadWriteData(this.handler);
 
     // JWT Authorizer using Cognito
     const issuerUrl = `https://cognito-idp.${this.region}.amazonaws.com/${authStack.userPool.userPoolId}`;

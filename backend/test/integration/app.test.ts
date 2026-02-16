@@ -104,6 +104,18 @@ describe("App integration", () => {
     });
   });
 
+  describe("Preference routes reject unauthenticated requests", () => {
+    it("GET /groups/g-1/preferences returns 401 without auth", async () => {
+      const res = await unauthRequest("GET", "/groups/g-1/preferences");
+      expect(res.status).toBe(401);
+    });
+
+    it("PUT /groups/g-1/preferences returns 401 without auth", async () => {
+      const res = await unauthRequest("PUT", "/groups/g-1/preferences");
+      expect(res.status).toBe(401);
+    });
+  });
+
   describe("Group membership enforcement", () => {
     it("GET /groups/:id returns 403 for non-member", async () => {
       // getMembership returns nothing

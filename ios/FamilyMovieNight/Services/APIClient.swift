@@ -20,7 +20,9 @@ class APIClient {
         }
 
         if let body = body {
-            urlRequest.httpBody = try JSONEncoder().encode(body)
+            let encoder = JSONEncoder()
+            encoder.keyEncodingStrategy = .convertToSnakeCase
+            urlRequest.httpBody = try encoder.encode(body)
         }
 
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
