@@ -48,6 +48,28 @@ describe("ApiStack", () => {
     expect(routes[routeIds[0]].Properties.AuthorizationType).toBe("NONE");
   });
 
+  it("grants Lambda read-write access to picksTable", () => {
+    template.hasResourceProperties("AWS::IAM::Policy", {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: Match.arrayWith([
+              "dynamodb:BatchGetItem",
+              "dynamodb:BatchWriteItem",
+              "dynamodb:PutItem",
+              "dynamodb:DeleteItem",
+            ]),
+            Resource: Match.arrayWith([
+              {
+                "Fn::ImportValue": Match.stringLikeRegexp("Picks"),
+              },
+            ]),
+          }),
+        ]),
+      },
+    });
+  });
+
   it("catch-all route uses JWT authorizer", () => {
     const routes = template.findResources("AWS::ApiGatewayV2::Route", {
       Properties: {
