@@ -14,133 +14,162 @@ Use this as a lightweight issue tracker if not using GitHub Issues yet.
 
 ### Task 01 — Setup AWS dev environment + IaC skeleton
 - [x] (done) Setup AWS dev environment + IaC skeleton
-  - Merged 2026-02-15. Delivered: 5 CDK stacks (Data, Auth, Api, Notifications, Monitoring), DynamoDB tables with GSIs, Hono Lambda skeleton (`/health`), error class hierarchy, CDK snapshot + assertion tests, CI workflow.
+  - Merged 2026-02-15 (PR #1/#2). Delivered: 5 CDK stacks (Data, Auth, Api, Notifications, Monitoring), DynamoDB tables with GSIs, Hono Lambda skeleton (`/health`), error class hierarchy, CDK snapshot + assertion tests, CI workflow.
 
 ---
 
 ### Task 02 — iOS app skeleton + auth wiring
-- [ ] (ready) iOS app skeleton + auth wiring
-  - See detailed checklist below.
+- [x] (done) iOS app skeleton + auth wiring
+  - Merged 2026-02-15 (PR #5). Delivered: Cognito User Pool + Apple IdP federation, HTTP API Gateway with JWT Authorizer, `POST /auth/me` (JIT provisioning) + `DELETE /auth/account`, iOS project scaffold with Amplify Auth, Sign in with Apple + email/password flows, auth state management.
 
 ---
 
 ### Task 03 — Create/join family group
-- [ ] (ready) Create/join family group
+- [x] (done) Create/join family group
+  - Merged 2026-02-16 (PR #6). Delivered: group CRUD (`POST /groups`, `GET /groups/:id`, `PATCH /groups/:id`), membership management (`GET /groups/me`, `DELETE /groups/:id/members/me` with creator promotion), invite flow (`POST /groups/:id/invites`, `GET /groups/:id/invites`, `DELETE /groups/:id/invites/:invite_id`, `POST /invites/:token/accept`), multi-use invites with 7-day TTL, atomic DynamoDB transactions, group-service + invite-service, comprehensive route + service tests.
+
+---
 
 ### Task 04 — Preferences + watched history (minimal)
 - [ ] (ready) Preferences + watched history (minimal)
+  - See detailed checklist below.
 
 ### Task 05 — Suggestions endpoint + UI
 - [ ] (ready) Suggestions endpoint + UI
 
 ---
 
-## Task 02 — Detailed Breakdown
+## Task 04 — Detailed Breakdown
 
 ### Scope
-Covers US-01 (Sign in with Apple) and US-02 (Email/password sign-up) end-to-end, plus the iOS project scaffold. By the end, a user can sign up, sign in, and hit an authenticated `/me` endpoint that returns their profile via JIT provisioning.
 
-### Dependencies & Decisions
+Covers US-08 (genre likes/dislikes), US-09 (content-rating ceiling), and US-18 (mark as watched) end-to-end on the backend, plus a `GET /groups/:id/preferences/summary` endpoint that Task 05 will consume for the suggestion algorithm. By the end, a member can set their genre preferences and content-rating ceiling, and any member can mark a picked movie as watched so it's excluded from future suggestions.
 
-| # | Decision needed | Proposed default | Status |
-|---|---|---|---|
-| D1 | iOS minimum deployment target | iOS 17.0 (covers ~95% of active devices; enables modern SwiftUI APIs) | **Propose** |
-| D2 | iOS architecture pattern | MVVM with SwiftUI + async/await; no third-party reactive framework | **Propose** |
-| D3 | Networking layer | URLSession with async/await; thin `APIClient` wrapper; no Alamofire | **Propose** |
-| D4 | Auth SDK | AWS Amplify Auth v6 (Swift) — thin wrapper over Cognito; handles token refresh, Keychain storage, Apple Sign-In federation | **Propose** |
-| D5 | Keychain storage | Amplify handles token persistence in Keychain automatically; no manual Keychain code needed | **Propose** |
-| D6 | Apple Developer account | Required for Sign in with Apple capability + Service ID for Cognito federation. Must be configured before E2E auth works. | **Prerequisite** |
+**Out of scope for Task 04:** Streaming services (US-10, already on Group via PATCH), ratings (US-19, comes with Task 05), iOS preference UI (comes with Task 05 to deliver the full loop).
+
+### User Stories Covered
+
+| Story | Coverage |
+|---|---|
+| US-08 (Genre likes/dislikes) | Full — backend CRUD |
+| US-09 (Content-rating ceiling) | Backend CRUD; group-level effective ceiling via summary endpoint |
+| US-18 (Mark as watched) | Backend — mark pick as watched, query watched movie IDs for exclusion |
+
+### Dependencies
+
+| # | Dependency | Status |
+|---|---|---|
+| D1 | Preferences DynamoDB table (PK=group_id, SK=user_id) | ✅ Exists in data-stack |
+| D2 | Picks DynamoDB table (PK=pick_id, GSI=group-picks-index) | ✅ Exists in data-stack |
+| D3 | IAM grant for preferencesTable + picksTable on Lambda | ❌ Must add in api-stack |
+| D4 | TMDB genre ID list | Use static list from TMDB `/genre/movie/list`; hardcode in validation |
 
 ### Checklist
 
-#### A. iOS project scaffold
-- [ ] A1. Create Xcode project (`ios/FamilyMovieNight/`) — SwiftUI App lifecycle, iOS 17+
-- [ ] A2. Add `amplifyconfiguration.json` placeholder with Cognito User Pool ID, App Client ID, region
-- [ ] A3. Set up project structure: `App/`, `Features/Auth/`, `Features/Home/`, `Services/`, `Models/`
-- [ ] A4. Add Amplify Auth package dependency (Swift Package Manager)
-- [ ] A5. Configure Amplify in `@main App.init()` — call `Amplify.configure()`
+#### A. Models + validation schemas
 
-#### B. CDK — Cognito User Pool (Auth stack)
-- [ ] B1. Add Cognito User Pool to `auth-stack` with: email as sign-in alias, password policy (8+ chars, 1 number), auto-verify email
-- [ ] B2. Add User Pool App Client (no secret — public client for mobile)
-- [ ] B3. Add Apple Sign-In as federated identity provider (Service ID + Team ID + Key ID as CDK context/env vars — not hardcoded)
-- [ ] B4. Export User Pool ID, App Client ID, and region as CDK outputs (consumed by iOS `amplifyconfiguration.json` and API stack)
-- [ ] B5. CDK test: assert User Pool, App Client, and Apple IdP exist in synth output
+- [ ] A1. Create `backend/src/models/preference.ts` — Zod schemas:
+  - `PreferenceSchema`: `group_id`, `user_id`, `genre_likes` (string[]), `genre_dislikes` (string[]), `max_content_rating` (enum G/PG/PG-13/R, default PG-13), `updated_at`
+  - `UpsertPreferenceSchema`: input validation — `genre_likes` (min 2, max 20), `genre_dislikes` (max 20), `max_content_rating`; no overlap between likes and dislikes
+  - `TMDB_GENRE_IDS`: static map of valid TMDB genre IDs (28=Action, 35=Comedy, etc.) for validation
+- [ ] A2. Create `backend/src/models/pick.ts` — Zod schemas:
+  - `PickSchema`: `pick_id`, `round_id`, `group_id`, `tmdb_movie_id`, `picked_by`, `picked_at`, `watched` (bool), `watched_at` (nullable)
+  - `MarkWatchedSchema`: empty body (action is implicit from the route)
 
-#### C. CDK — API Gateway JWT Authorizer (Api stack)
-- [ ] C1. Add HTTP API (API Gateway v2) to `api-stack`
-- [ ] C2. Add JWT Authorizer referencing Cognito User Pool issuer URL and audience (App Client ID)
-- [ ] C3. Wire Lambda integration to HTTP API with default JWT auth on all routes except `/health`
-- [ ] C4. Export API endpoint URL as CDK output
-- [ ] C5. CDK test: assert HTTP API, JWT Authorizer, and Lambda integration exist
+#### B. Preference service
 
-#### D. Backend — Auth routes + JIT provisioning
-- [ ] D1. Add `POST /auth/me` route (Hono) — reads `sub` from API Gateway JWT context, creates User in DynamoDB if not exists, returns user profile
-- [ ] D2. Add `src/services/user-service.ts` — `getOrCreateUser(sub, email, displayName)` with DynamoDB `PutItem` (conditional on `attribute_not_exists`)
-- [ ] D3. Add `src/middleware/auth.ts` — extracts `sub` and `email` from API Gateway request context (JWT already validated by API Gateway; this just maps claims to Hono context)
-- [ ] D4. Add `DELETE /auth/account` route — deletes User record from DynamoDB (Cognito user deletion is a separate admin action, logged for now)
-- [ ] D5. Unit tests for user-service (mock DynamoDB client)
-- [ ] D6. Integration-style test: Hono `app.request()` to `/auth/me` with mocked JWT context
+- [ ] B1. Create `backend/src/services/preference-service.ts` with methods:
+  - `getPreference(groupId, userId)` — GetItem from Preferences table; returns null if not set
+  - `upsertPreference(groupId, userId, input)` — PutItem with `updated_at = now()`; validates membership first via GroupService
+  - `getGroupPreferences(groupId)` — Query all preferences for a group (PK = group_id); returns array
+  - `getGroupPreferenceSummary(groupId)` — Computes: union of liked genres, unanimously-disliked genres, effective content-rating ceiling (min across members)
+  - `deletePreference(groupId, userId)` — DeleteItem (used when a member leaves a group)
 
-#### E. iOS — Sign in with Apple flow
-- [ ] E1. Add "Sign in with Apple" capability to Xcode project
-- [ ] E2. Create `AuthViewModel` — manages auth state (signed out / signing in / signed in / error)
-- [ ] E3. Implement `ASAuthorizationAppleIDProvider` flow → pass authorization code to Amplify `signInWithWebUI(for: .apple)`
-- [ ] E4. Create `SignInView` — "Continue with Apple" button + "Sign up with email" link
-- [ ] E5. On successful auth, call `GET /auth/me` to trigger JIT provisioning and cache user profile locally
+#### C. Pick / watched service
 
-#### F. iOS — Email/password sign-up flow
-- [ ] F1. Create `EmailSignUpView` — email + password + confirm password fields, validation (8+ chars, 1 number)
-- [ ] F2. Wire to Amplify `signUp(username:password:)` → email verification step
-- [ ] F3. Create `VerifyEmailView` — 6-digit code input, resend button
-- [ ] F4. Wire to Amplify `confirmSignUp(for:confirmationCode:)` → auto sign-in on success
-- [ ] F5. Create `EmailSignInView` — email + password, "Forgot password?" link (P2, placeholder for now)
+- [ ] C1. Create `backend/src/services/pick-service.ts` with methods:
+  - `createPick(groupId, roundId, tmdbMovieId, pickedBy)` — PutItem; Task 05 will call this from voting flow
+  - `markWatched(pickId, userId, groupId)` — UpdateItem setting `watched=true`, `watched_at=now()`; validates membership + pick belongs to group
+  - `getGroupPicks(groupId)` — Query via `group-picks-index`; returns all picks for group
+  - `getWatchedMovieIds(groupId)` — Returns `Set<number>` of tmdb_movie_ids where `watched=true` (used by Task 05 suggestion filter)
 
-#### G. iOS — Auth state management & navigation
-- [ ] G1. Create `AuthService` (singleton / environment object) — wraps Amplify auth state listener, publishes `isSignedIn`
-- [ ] G2. Root `ContentView` switches between `SignInView` and `HomeView` based on auth state
-- [ ] G3. `HomeView` — placeholder screen showing user's display name + sign-out button
-- [ ] G4. Sign-out calls `Amplify.Auth.signOut()`, clears local state, returns to `SignInView`
+#### D. Routes
 
-#### H. CI / quality
-- [ ] H1. Add `xcodebuild build` step to GitHub Actions CI (build-only, no sim tests yet)
-- [ ] H2. Ensure `cdk synth` still passes with new Auth/Api stack resources
-- [ ] H3. `vitest` passes for new backend tests
+- [ ] D1. Create `backend/src/routes/preferences.ts`:
+  - `GET /groups/:group_id/preferences/me` — returns current user's preferences for the group (200 or 200 with defaults if unset)
+  - `PUT /groups/:group_id/preferences/me` — upsert preferences; validates body with `UpsertPreferenceSchema`; returns 200 with saved preferences
+  - `GET /groups/:group_id/preferences` — returns all members' preferences (array); membership required
+  - `GET /groups/:group_id/preferences/summary` — returns computed summary (liked genres, disliked genres, effective ceiling); membership required
+- [ ] D2. Create `backend/src/routes/picks.ts`:
+  - `POST /groups/:group_id/picks/:pick_id/watched` — marks pick as watched; membership required; returns 200
+  - `GET /groups/:group_id/watched` — returns list of watched movie IDs for the group; membership required
+- [ ] D3. Wire new routers into `backend/src/index.ts`
+
+#### E. CDK — IAM grants
+
+- [ ] E1. Add `grantReadWriteData` for `preferencesTable` and `picksTable` on Lambda handler in `backend/cdk/lib/api-stack.ts`
+- [ ] E2. CDK test: assert IAM grants exist for new tables
+
+#### F. Cleanup hook — delete preferences on group leave
+
+- [ ] F1. In `group-service.ts` `leaveGroup()`, add call to `PreferenceService.deletePreference(groupId, userId)` so orphaned preferences don't pollute group summaries
+
+#### G. Tests
+
+- [ ] G1. Unit tests `backend/test/services/preference-service.test.ts`:
+  - `getPreference` — returns preference or null
+  - `upsertPreference` — creates new / updates existing
+  - `upsertPreference` — rejects non-member (throws ForbiddenError)
+  - `upsertPreference` — rejects overlapping likes/dislikes (throws ValidationError)
+  - `getGroupPreferenceSummary` — computes union of likes, intersection of dislikes, min ceiling
+  - `deletePreference` — removes preference record
+- [ ] G2. Unit tests `backend/test/services/pick-service.test.ts`:
+  - `markWatched` — sets watched=true and watched_at
+  - `markWatched` — rejects non-member
+  - `getWatchedMovieIds` — returns set of tmdb IDs
+- [ ] G3. Route tests `backend/test/routes/preferences.test.ts`:
+  - `GET /groups/:id/preferences/me` — 200 with preferences or defaults
+  - `PUT /groups/:id/preferences/me` — 200 on valid input; 400 on bad input; 403 for non-member
+  - `GET /groups/:id/preferences/summary` — 200 with computed summary
+- [ ] G4. Route tests `backend/test/routes/picks.test.ts`:
+  - `POST /groups/:id/picks/:pick_id/watched` — 200 on success; 403 for non-member; 404 for bad pick
+  - `GET /groups/:id/watched` — 200 with array of tmdb_movie_ids
+- [ ] G5. CDK test: `cdk synth` passes; IAM policy assertions for new tables
 
 ### Definition of Done
-- [ ] User can sign up with Apple ID and see the Home screen (E2E with deployed backend)
-- [ ] User can sign up with email, verify, and see the Home screen
-- [ ] `/auth/me` returns a User record from DynamoDB with JIT-provisioned defaults
-- [ ] Tokens stored in Keychain (via Amplify), not UserDefaults
-- [ ] CDK synth produces Auth stack with Cognito + Api stack with JWT Authorizer
+
+- [ ] User can set genre likes/dislikes and content-rating ceiling via API
+- [ ] `GET .../preferences/summary` returns correct group-level aggregation (union of likes, unanimous dislikes, min ceiling)
+- [ ] A picked movie can be marked as watched; `GET .../watched` returns its tmdb ID
+- [ ] Leaving a group cleans up the member's preferences
+- [ ] Validation rejects: overlapping likes/dislikes, invalid genre IDs, invalid ratings
 - [ ] All new backend tests pass (`vitest`)
-- [ ] iOS project builds in CI
-- [ ] No secrets committed (Cognito config uses env vars / CDK context, not hardcoded keys)
+- [ ] CDK synth passes with updated IAM grants
+- [ ] No secrets committed
 - [ ] Code merged to main via PR
 
-### File touchpoints
+### File Touchpoints
 
 | Area | Files (new or modified) |
 |---|---|
-| CDK | `backend/cdk/lib/auth-stack.ts`, `backend/cdk/lib/api-stack.ts` |
-| CDK tests | `backend/test/cdk/auth-stack.test.ts`, `backend/test/cdk/api-stack.test.ts` |
-| Backend routes | `backend/src/routes/auth.ts`, `backend/src/index.ts` |
-| Backend services | `backend/src/services/user-service.ts` |
-| Backend middleware | `backend/src/middleware/auth.ts` |
-| Backend tests | `backend/test/routes/auth.test.ts`, `backend/test/services/user-service.test.ts` |
-| iOS project | `ios/FamilyMovieNight.xcodeproj`, `ios/FamilyMovieNight/` |
-| iOS auth | `ios/FamilyMovieNight/Features/Auth/AuthViewModel.swift`, `SignInView.swift`, `EmailSignUpView.swift`, `VerifyEmailView.swift`, `EmailSignInView.swift` |
-| iOS services | `ios/FamilyMovieNight/Services/AuthService.swift`, `Services/APIClient.swift` |
-| iOS config | `ios/FamilyMovieNight/amplifyconfiguration.json` |
-| CI | `.github/workflows/ci.yml` |
+| Models | `backend/src/models/preference.ts` ✱, `backend/src/models/pick.ts` ✱ |
+| Services | `backend/src/services/preference-service.ts` ✱, `backend/src/services/pick-service.ts` ✱ |
+| Routes | `backend/src/routes/preferences.ts` ✱, `backend/src/routes/picks.ts` ✱ |
+| App wiring | `backend/src/index.ts` (add route mounts) |
+| Group cleanup | `backend/src/services/group-service.ts` (leaveGroup → delete preference) |
+| CDK | `backend/cdk/lib/api-stack.ts` (add IAM grants) |
+| CDK tests | `backend/test/cdk/api-stack.test.ts` (assert new grants) |
+| Service tests | `backend/test/services/preference-service.test.ts` ✱, `backend/test/services/pick-service.test.ts` ✱ |
+| Route tests | `backend/test/routes/preferences.test.ts` ✱, `backend/test/routes/picks.test.ts` ✱ |
 
-### Test requirements
+✱ = new file
+
+### Test Requirements
 
 | Layer | What to test | Approach |
 |---|---|---|
-| CDK | Auth stack has UserPool, AppClient, Apple IdP | `Template.fromStack()` assertions |
-| CDK | Api stack has HttpApi, JwtAuthorizer, LambdaIntegration | `Template.fromStack()` assertions |
-| Backend | `user-service.getOrCreateUser` — creates new user, returns existing | Mock DynamoDB `@aws-sdk/lib-dynamodb` |
-| Backend | `POST /auth/me` — returns 200 with user JSON | `app.request()` with mocked request context |
-| Backend | `DELETE /auth/account` — returns 204 | `app.request()` with mocked request context |
-| iOS | Build succeeds | `xcodebuild build` in CI (no unit tests yet — added in Task 03) |
+| Service | Preference CRUD + summary aggregation | Mock DynamoDB `@aws-sdk/lib-dynamodb` |
+| Service | Pick watched flow + watched ID retrieval | Mock DynamoDB |
+| Routes | Preference GET/PUT + summary endpoint | `app.request()` with mocked JWT context |
+| Routes | Pick watched + watched list endpoints | `app.request()` with mocked JWT context |
+| CDK | IAM grants for preferencesTable + picksTable | `Template.fromStack()` assertions |
