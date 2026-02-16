@@ -64,6 +64,57 @@ describe("Group routes", () => {
     mockSendFn.mockReset();
   });
 
+  describe("GET /groups/me", () => {
+    it("returns null when user has no group", async () => {
+      // getUserGroup query — no group
+      mockSendFn.mockResolvedValueOnce({ Items: [] });
+
+      const res = await makeRequest("GET", "/groups/me");
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.group).toBeNull();
+    });
+
+    it("returns full group when user has one", async () => {
+      // getUserGroup query — has a group
+      mockSendFn.mockResolvedValueOnce({
+        Items: [{ group_id: "g-1", user_id: "user-123", role: "creator" }],
+      });
+      // getGroup (within getGroupWithMembers)
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          group_id: "g-1",
+          name: "The Emersons",
+          created_by: "user-123",
+          streaming_services: [],
+          member_count: 1,
+        },
+      });
+      // getMembers
+      mockSendFn.mockResolvedValueOnce({
+        Items: [
+          { group_id: "g-1", user_id: "user-123", role: "creator", joined_at: "2026-01-01T00:00:00Z" },
+        ],
+      });
+      // BatchGetCommand for user profiles
+      mockSendFn.mockResolvedValueOnce({
+        Responses: {
+          "test-USERS": [
+            { user_id: "user-123", display_name: "Tim", avatar_key: "avatar_bear" },
+          ],
+        },
+      });
+
+      const res = await makeRequest("GET", "/groups/me");
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.name).toBe("The Emersons");
+      expect(body.members).toHaveLength(1);
+    });
+  });
+
   describe("POST /groups", () => {
     it("creates a group and returns 201", async () => {
       // getUserGroup query (user-groups-index) — no existing group
@@ -77,9 +128,7 @@ describe("Group routes", () => {
           avatar_key: "avatar_bear",
         },
       });
-      // PutCommand (group)
-      mockSendFn.mockResolvedValueOnce({});
-      // PutCommand (membership)
+      // TransactWriteCommand (group + membership)
       mockSendFn.mockResolvedValueOnce({});
 
       const res = await makeRequest("POST", "/groups", {
@@ -90,6 +139,7 @@ describe("Group routes", () => {
       const body = await res.json();
       expect(body.name).toBe("The Emersons");
       expect(body.created_by).toBe("user-123");
+      expect(body.member_count).toBe(1);
       expect(body.members).toHaveLength(1);
       expect(body.members[0].role).toBe("creator");
     });
@@ -128,6 +178,7 @@ describe("Group routes", () => {
           name: "Test Group",
           created_by: "user-1",
           streaming_services: [],
+          member_count: 1,
         },
       });
       // getMembers — QueryCommand
@@ -136,9 +187,13 @@ describe("Group routes", () => {
           { group_id: "g-1", user_id: "user-123", role: "member", joined_at: "2026-01-01T00:00:00Z" },
         ],
       });
-      // enriched user lookup
+      // BatchGetCommand for user profiles
       mockSendFn.mockResolvedValueOnce({
-        Item: { display_name: "Tim", avatar_key: "avatar_bear" },
+        Responses: {
+          "test-USERS": [
+            { user_id: "user-123", display_name: "Tim", avatar_key: "avatar_bear" },
+          ],
+        },
       });
 
       const res = await makeRequest("GET", "/groups/g-1");
@@ -164,7 +219,7 @@ describe("Group routes", () => {
       mockSendFn.mockResolvedValueOnce({
         Item: { group_id: "g-1", user_id: "user-123", role: "member" },
       });
-      // DeleteCommand
+      // TransactWriteCommand (delete membership + update count)
       mockSendFn.mockResolvedValueOnce({});
 
       const res = await makeRequest("DELETE", "/groups/g-1/members/me");
@@ -220,18 +275,12 @@ describe("Group routes", () => {
       });
       // getUserGroup — QueryCommand (user-groups-index) — no existing group
       mockSendFn.mockResolvedValueOnce({ Items: [] });
-      // acceptInvite — UpdateCommand
-      mockSendFn.mockResolvedValueOnce({});
-      // addMember — getMembers QueryCommand
-      mockSendFn.mockResolvedValueOnce({
-        Items: [{ group_id: "g-1", user_id: "user-1", role: "creator" }],
-      });
-      // addMember — PutCommand
-      mockSendFn.mockResolvedValueOnce({});
       // getGroup — GetCommand
       mockSendFn.mockResolvedValueOnce({
-        Item: { group_id: "g-1", name: "The Emersons" },
+        Item: { group_id: "g-1", name: "The Emersons", member_count: 1 },
       });
+      // addMember — TransactWriteCommand
+      mockSendFn.mockResolvedValueOnce({});
 
       const res = await makeRequest("POST", "/invites/abc123/accept");
 
@@ -257,8 +306,7 @@ describe("Group routes", () => {
           },
         ],
       });
-      // getUserGroup — no existing group
-      mockSendFn.mockResolvedValueOnce({ Items: [] });
+      // validateInvite throws synchronously — no more mocks needed
 
       const res = await makeRequest("POST", "/invites/expired-token/accept");
 

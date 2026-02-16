@@ -5,67 +5,72 @@ struct GroupDetailView: View {
     @State private var showShareSheet = false
     @State private var showLeaveConfirmation = false
 
-    private var group: Group { viewModel.group! }
     private var isCreator: Bool {
-        group.members.first(where: { $0.isCreator })?.userId == nil // TODO: compare with current user ID
+        guard let userId = viewModel.currentUserId,
+              let group = viewModel.group else { return false }
+        return group.members.first(where: { $0.isCreator })?.userId == userId
     }
 
     var body: some View {
-        List {
-            Section("Members (\(group.members.count)/8)") {
-                ForEach(group.members) { member in
-                    HStack {
-                        Text(member.displayName)
-                        Spacer()
-                        if member.isCreator {
-                            Text("Creator")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+        if let group = viewModel.group {
+            List {
+                Section("Members (\(group.members.count)/8)") {
+                    ForEach(group.members) { member in
+                        HStack {
+                            Text(member.displayName)
+                            Spacer()
+                            if member.isCreator {
+                                Text("Creator")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
-            }
 
-            Section {
-                Button("Share Invite Link") {
-                    Task {
-                        await viewModel.createInvite()
-                        if viewModel.currentInvite != nil {
-                            showShareSheet = true
+                if isCreator {
+                    Section {
+                        Button("Share Invite Link") {
+                            Task {
+                                await viewModel.createInvite()
+                                if viewModel.currentInvite != nil {
+                                    showShareSheet = true
+                                }
+                            }
                         }
                     }
                 }
-            }
 
-            if let error = viewModel.error {
+                if let error = viewModel.error {
+                    Section {
+                        Text(error)
+                            .foregroundStyle(.red)
+                    }
+                }
+
                 Section {
-                    Text(error)
-                        .foregroundStyle(.red)
+                    Button("Leave Group", role: .destructive) {
+                        showLeaveConfirmation = true
+                    }
                 }
             }
-
-            Section {
-                Button("Leave Group", role: .destructive) {
-                    showLeaveConfirmation = true
+            .navigationTitle(group.name)
+            .sheet(isPresented: $showShareSheet) {
+                if let invite = viewModel.currentInvite {
+                    ShareInviteView(inviteUrl: invite.inviteUrl, inviteToken: invite.inviteToken)
                 }
             }
-        }
-        .navigationTitle(group.name)
-        .sheet(isPresented: $showShareSheet) {
-            if let invite = viewModel.currentInvite {
-                ShareInviteView(inviteUrl: invite.inviteUrl, inviteToken: invite.inviteToken)
+            .confirmationDialog(
+                "Leave Group?",
+                isPresented: $showLeaveConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Leave", role: .destructive) {
+                    Task { await viewModel.leaveGroup() }
+                }
+            } message: {
+                Text("You'll need a new invite to rejoin.")
             }
-        }
-        .confirmationDialog(
-            "Leave Group?",
-            isPresented: $showLeaveConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Leave", role: .destructive) {
-                Task { await viewModel.leaveGroup() }
-            }
-        } message: {
-            Text("You'll need a new invite to rejoin.")
         }
     }
 }

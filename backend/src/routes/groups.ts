@@ -25,6 +25,21 @@ function getUserService() {
   return new UserService(getDocClient(), tableName("USERS"));
 }
 
+// GET /groups/me — get the current user's group (or null)
+groups.get("/groups/me", async (c) => {
+  const userId = c.get("userId") as string;
+
+  const groupService = getGroupService();
+  const membership = await groupService.getUserGroup(userId);
+
+  if (!membership) {
+    return c.json({ group: null });
+  }
+
+  const group = await groupService.getGroupWithMembers(membership.group_id);
+  return c.json(group);
+});
+
 // POST /groups — create a new group
 groups.post("/groups", async (c) => {
   const userId = c.get("userId") as string;
@@ -87,6 +102,8 @@ groups.patch("/groups/:group_id", async (c) => {
 });
 
 // DELETE /groups/:group_id/members/me — leave group
+// NOTE: This endpoint only allows a user to remove themselves (userId from JWT).
+// A future "kick member" endpoint should verify the caller is the group creator.
 groups.delete("/groups/:group_id/members/me", async (c) => {
   const userId = c.get("userId") as string;
   const groupId = c.req.param("group_id");
@@ -164,6 +181,9 @@ groups.post("/invites/:invite_token/accept", async (c) => {
   const inviteService = getInviteService();
   const invite = await inviteService.getInviteByToken(token);
 
+  // Validate invite is still usable (pending + not expired)
+  inviteService.validateInvite(invite);
+
   // Check user isn't already in a group
   const groupService = getGroupService();
   const existingGroup = await groupService.getUserGroup(userId);
@@ -171,14 +191,11 @@ groups.post("/invites/:invite_token/accept", async (c) => {
     throw new ConflictError("You are already in a group");
   }
 
-  // Validate and accept the invite
-  await inviteService.acceptInvite(invite);
-
-  // Add user to the group
-  await groupService.addMember(invite.group_id, userId);
-
-  // Get group name for response
+  // Verify the group still exists and get its name for the response
   const group = await groupService.getGroup(invite.group_id);
+
+  // Add user to the group (transaction enforces capacity + uniqueness)
+  await groupService.addMember(invite.group_id, userId);
 
   return c.json({
     group_id: invite.group_id,

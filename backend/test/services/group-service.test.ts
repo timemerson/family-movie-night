@@ -21,9 +21,8 @@ describe("GroupService", () => {
   });
 
   describe("createGroup", () => {
-    it("creates group and membership, returns group with members", async () => {
-      mockSend.mockResolvedValueOnce({}); // PutCommand (group)
-      mockSend.mockResolvedValueOnce({}); // PutCommand (membership)
+    it("creates group and membership atomically, returns group with members", async () => {
+      mockSend.mockResolvedValueOnce({}); // TransactWriteCommand
 
       const result = await service.createGroup(
         "user-1",
@@ -35,10 +34,11 @@ describe("GroupService", () => {
       expect(result.name).toBe("The Emersons");
       expect(result.created_by).toBe("user-1");
       expect(result.streaming_services).toEqual([]);
+      expect(result.member_count).toBe(1);
       expect(result.members).toHaveLength(1);
       expect(result.members[0].role).toBe("creator");
       expect(result.members[0].display_name).toBe("Tim");
-      expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(mockSend).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -57,6 +57,57 @@ describe("GroupService", () => {
       await expect(service.getGroup("g-missing")).rejects.toThrow(
         "Group not found",
       );
+    });
+  });
+
+  describe("getGroupWithMembers", () => {
+    it("batch-fetches user profiles for members", async () => {
+      // getGroup
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          group_id: "g-1",
+          name: "Test",
+          created_by: "user-1",
+          streaming_services: [],
+          member_count: 2,
+        },
+      });
+      // getMembers
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          { group_id: "g-1", user_id: "user-1", role: "creator", joined_at: "2026-01-01T00:00:00Z" },
+          { group_id: "g-1", user_id: "user-2", role: "member", joined_at: "2026-01-02T00:00:00Z" },
+        ],
+      });
+      // BatchGetCommand
+      mockSend.mockResolvedValueOnce({
+        Responses: {
+          "test-users": [
+            { user_id: "user-1", display_name: "Tim", avatar_key: "avatar_bear" },
+            { user_id: "user-2", display_name: "Jane", avatar_key: "avatar_cat" },
+          ],
+        },
+      });
+
+      const result = await service.getGroupWithMembers("g-1");
+
+      expect(result.members).toHaveLength(2);
+      expect(result.members[0].display_name).toBe("Tim");
+      expect(result.members[1].display_name).toBe("Jane");
+      expect(mockSend).toHaveBeenCalledTimes(3);
+    });
+
+    it("returns empty members for group with no members", async () => {
+      mockSend.mockResolvedValueOnce({
+        Item: { group_id: "g-1", name: "Test", member_count: 0 },
+      });
+      mockSend.mockResolvedValueOnce({ Items: [] });
+
+      const result = await service.getGroupWithMembers("g-1");
+
+      expect(result.members).toHaveLength(0);
+      // Should not call BatchGetCommand
+      expect(mockSend).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -101,26 +152,23 @@ describe("GroupService", () => {
   });
 
   describe("addMember", () => {
-    it("adds a member to the group", async () => {
-      // getMembers query
-      mockSend.mockResolvedValueOnce({
-        Items: [{ group_id: "g-1", user_id: "user-1", role: "creator" }],
-      });
-      // PutCommand
-      mockSend.mockResolvedValueOnce({});
+    it("adds a member via transaction", async () => {
+      mockSend.mockResolvedValueOnce({}); // TransactWriteCommand
 
       const result = await service.addMember("g-1", "user-2");
       expect(result.role).toBe("member");
       expect(result.user_id).toBe("user-2");
+      expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
     it("throws ConflictError when group is full", async () => {
-      const members = Array.from({ length: 8 }, (_, i) => ({
-        group_id: "g-1",
-        user_id: `user-${i}`,
-        role: i === 0 ? "creator" : "member",
-      }));
-      mockSend.mockResolvedValueOnce({ Items: members });
+      const txError = new Error("Transaction cancelled");
+      txError.name = "TransactionCanceledException";
+      (txError as any).CancellationReasons = [
+        { Code: "ConditionalCheckFailed" },
+        { Code: "None" },
+      ];
+      mockSend.mockRejectedValueOnce(txError);
 
       await expect(service.addMember("g-1", "user-new")).rejects.toThrow(
         "Group is full",
@@ -128,9 +176,13 @@ describe("GroupService", () => {
     });
 
     it("throws ConflictError when user is already a member", async () => {
-      mockSend.mockResolvedValueOnce({
-        Items: [{ group_id: "g-1", user_id: "user-1", role: "creator" }],
-      });
+      const txError = new Error("Transaction cancelled");
+      txError.name = "TransactionCanceledException";
+      (txError as any).CancellationReasons = [
+        { Code: "None" },
+        { Code: "ConditionalCheckFailed" },
+      ];
+      mockSend.mockRejectedValueOnce(txError);
 
       await expect(service.addMember("g-1", "user-1")).rejects.toThrow(
         "Already a member",
@@ -139,12 +191,12 @@ describe("GroupService", () => {
   });
 
   describe("leaveGroup", () => {
-    it("removes member from group", async () => {
+    it("removes regular member and decrements count atomically", async () => {
       // getMembership
       mockSend.mockResolvedValueOnce({
         Item: { group_id: "g-1", user_id: "user-2", role: "member" },
       });
-      // DeleteCommand
+      // TransactWriteCommand (delete membership + update count)
       mockSend.mockResolvedValueOnce({});
 
       await service.leaveGroup("g-1", "user-2");
@@ -156,32 +208,57 @@ describe("GroupService", () => {
       mockSend.mockResolvedValueOnce({
         Item: { group_id: "g-1", user_id: "user-1", role: "creator" },
       });
-      // DeleteCommand
-      mockSend.mockResolvedValueOnce({});
       // getMembers (remaining)
       mockSend.mockResolvedValueOnce({
         Items: [
           {
             group_id: "g-1",
+            user_id: "user-1",
+            role: "creator",
+            joined_at: "2026-01-01T00:00:00Z",
+          },
+          {
+            group_id: "g-1",
             user_id: "user-2",
             role: "member",
-            joined_at: "2026-01-01T00:00:00Z",
+            joined_at: "2026-01-02T00:00:00Z",
           },
           {
             group_id: "g-1",
             user_id: "user-3",
             role: "member",
-            joined_at: "2026-01-02T00:00:00Z",
+            joined_at: "2026-01-03T00:00:00Z",
           },
         ],
       });
-      // UpdateCommand (membership role)
-      mockSend.mockResolvedValueOnce({});
-      // UpdateCommand (group created_by)
+      // TransactWriteCommand (delete + promote + update group)
       mockSend.mockResolvedValueOnce({});
 
       await service.leaveGroup("g-1", "user-1");
-      expect(mockSend).toHaveBeenCalledTimes(5);
+      expect(mockSend).toHaveBeenCalledTimes(3);
+    });
+
+    it("deletes group when last member leaves", async () => {
+      // getMembership
+      mockSend.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-1", role: "creator" },
+      });
+      // getMembers (only the leaving user)
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          {
+            group_id: "g-1",
+            user_id: "user-1",
+            role: "creator",
+            joined_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+      });
+      // TransactWriteCommand (delete membership + delete group)
+      mockSend.mockResolvedValueOnce({});
+
+      await service.leaveGroup("g-1", "user-1");
+      expect(mockSend).toHaveBeenCalledTimes(3);
     });
 
     it("throws NotFoundError when not a member", async () => {

@@ -2,26 +2,17 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var authService: AuthService
-    @StateObject private var groupViewModel: GroupViewModel
+    @StateObject private var groupViewModel = GroupViewModel()
 
     @State private var showCreateGroup = false
     @State private var showJoinGroup = false
-
-    init() {
-        // APIClient will be injected properly once the app wiring is finalized;
-        // for now use a placeholder URL that matches the deployed API Gateway.
-        let placeholder = URL(string: "https://api.familymovienight.app")!
-        let authService = AuthService()
-        let client = APIClient(baseURL: placeholder, authService: authService)
-        _groupViewModel = StateObject(wrappedValue: GroupViewModel(apiClient: client))
-    }
 
     var body: some View {
         NavigationStack {
             Group {
                 if groupViewModel.isLoading {
                     ProgressView("Loading...")
-                } else if let group = groupViewModel.group {
+                } else if groupViewModel.group != nil {
                     GroupDetailView(viewModel: groupViewModel)
                 } else {
                     noGroupView
@@ -35,6 +26,17 @@ struct HomeView: View {
                     }
                 }
             }
+        }
+        .task {
+            let client = APIClient(
+                baseURL: URL(string: "https://api.familymovienight.app")!,
+                authService: authService
+            )
+            groupViewModel.configure(
+                apiClient: client,
+                currentUserId: authService.userId ?? ""
+            )
+            await groupViewModel.loadMyGroup()
         }
     }
 

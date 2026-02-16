@@ -7,13 +7,38 @@ class GroupViewModel: ObservableObject {
     @Published var error: String?
     @Published var currentInvite: InviteResponse?
 
-    private let apiClient: APIClient
+    private(set) var currentUserId: String?
+    private var apiClient: APIClient?
 
-    init(apiClient: APIClient) {
+    func configure(apiClient: APIClient, currentUserId: String) {
+        guard self.apiClient == nil else { return }
         self.apiClient = apiClient
+        self.currentUserId = currentUserId
+    }
+
+    func loadMyGroup() async {
+        guard let apiClient else { return }
+        isLoading = true
+        error = nil
+        do {
+            // GET /groups/me returns either { group: null } or a full Group object
+            // Try to decode as a full Group first; if that fails, user has no group
+            let loaded: Group = try await apiClient.request("GET", path: "/groups/me")
+            group = loaded
+        } catch let apiError as APIError {
+            // A 200 with { group: null } will fail to decode as Group — that's expected
+            if case .httpError = apiError {
+                error = errorMessage(from: apiError)
+            }
+            // Decode failures for { group: null } are not errors — user simply has no group
+        } catch {
+            // DecodingError when backend returns { group: null } — user has no group, not an error
+        }
+        isLoading = false
     }
 
     func createGroup(name: String) async {
+        guard let apiClient else { return }
         isLoading = true
         error = nil
         do {
@@ -23,12 +48,13 @@ class GroupViewModel: ObservableObject {
         } catch let apiError as APIError {
             error = errorMessage(from: apiError)
         } catch {
-            self.error = error.localizedDescription
+            self.error = "An unexpected error occurred. Please try again."
         }
         isLoading = false
     }
 
     func loadGroup(groupId: String) async {
+        guard let apiClient else { return }
         isLoading = true
         error = nil
         do {
@@ -37,12 +63,13 @@ class GroupViewModel: ObservableObject {
         } catch let apiError as APIError {
             error = errorMessage(from: apiError)
         } catch {
-            self.error = error.localizedDescription
+            self.error = "An unexpected error occurred. Please try again."
         }
         isLoading = false
     }
 
     func acceptInvite(token: String) async {
+        guard let apiClient else { return }
         isLoading = true
         error = nil
         do {
@@ -52,12 +79,13 @@ class GroupViewModel: ObservableObject {
         } catch let apiError as APIError {
             error = errorMessage(from: apiError)
         } catch {
-            self.error = error.localizedDescription
+            self.error = "An unexpected error occurred. Please try again."
         }
         isLoading = false
     }
 
     func createInvite() async {
+        guard let apiClient else { return }
         guard let groupId = group?.groupId else { return }
         error = nil
         do {
@@ -66,11 +94,12 @@ class GroupViewModel: ObservableObject {
         } catch let apiError as APIError {
             error = errorMessage(from: apiError)
         } catch {
-            self.error = error.localizedDescription
+            self.error = "An unexpected error occurred. Please try again."
         }
     }
 
     func leaveGroup() async {
+        guard let apiClient else { return }
         guard let groupId = group?.groupId else { return }
         isLoading = true
         error = nil
@@ -80,7 +109,7 @@ class GroupViewModel: ObservableObject {
         } catch let apiError as APIError {
             error = errorMessage(from: apiError)
         } catch {
-            self.error = error.localizedDescription
+            self.error = "An unexpected error occurred. Please try again."
         }
         isLoading = false
     }
@@ -95,7 +124,7 @@ class GroupViewModel: ObservableObject {
             default: return "Something went wrong (error \(statusCode))."
             }
         case .invalidResponse:
-            return "Invalid response from server."
+            return "Could not reach the server. Check your connection."
         }
     }
 }

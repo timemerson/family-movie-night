@@ -25,6 +25,7 @@ describe("InviteService", () => {
       expect(invite.created_by).toBe("user-1");
       expect(invite.status).toBe("pending");
       expect(invite.invite_token).toBeTruthy();
+      expect(invite.invite_token.length).toBeLessThanOrEqual(8);
       expect(invite.invite_id).toBeTruthy();
       expect(new Date(invite.expires_at).getTime()).toBeGreaterThan(Date.now());
       expect(invite.ttl).toBeGreaterThan(0);
@@ -53,8 +54,8 @@ describe("InviteService", () => {
     });
   });
 
-  describe("acceptInvite", () => {
-    it("accepts a valid pending invite", async () => {
+  describe("validateInvite", () => {
+    it("passes for a valid pending invite", () => {
       const invite = {
         invite_id: "i-1",
         group_id: "g-1",
@@ -62,43 +63,36 @@ describe("InviteService", () => {
         expires_at: new Date(Date.now() + 86400000).toISOString(),
       } as any;
 
-      mockSend.mockResolvedValueOnce({});
-
-      await service.acceptInvite(invite);
-      expect(mockSend).toHaveBeenCalledTimes(1);
+      // Should not throw
+      expect(() => service.validateInvite(invite)).not.toThrow();
     });
 
-    it("throws GoneError for revoked invite", async () => {
+    it("throws GoneError for revoked invite", () => {
       const invite = {
         invite_id: "i-1",
         status: "revoked",
         expires_at: new Date(Date.now() + 86400000).toISOString(),
       } as any;
 
-      await expect(service.acceptInvite(invite)).rejects.toThrow(
-        "revoked",
-      );
+      expect(() => service.validateInvite(invite)).toThrow("revoked");
     });
 
-    it("throws GoneError for expired invite", async () => {
+    it("throws GoneError for expired invite", () => {
       const invite = {
         invite_id: "i-1",
         status: "pending",
         expires_at: new Date(Date.now() - 86400000).toISOString(),
       } as any;
 
-      await expect(service.acceptInvite(invite)).rejects.toThrow(
-        "expired",
-      );
+      expect(() => service.validateInvite(invite)).toThrow("expired");
     });
   });
 
   describe("listGroupInvites", () => {
-    it("returns only pending invites", async () => {
+    it("returns invites filtered by DynamoDB", async () => {
       mockSend.mockResolvedValueOnce({
         Items: [
           { invite_id: "i-1", status: "pending" },
-          { invite_id: "i-2", status: "accepted" },
           { invite_id: "i-3", status: "pending" },
         ],
       });

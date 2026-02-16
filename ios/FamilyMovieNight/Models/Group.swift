@@ -5,6 +5,7 @@ struct Group: Codable, Identifiable {
     let name: String
     let createdBy: String
     let streamingServices: [String]
+    let memberCount: Int
     let createdAt: String
     let members: [GroupMember]
 

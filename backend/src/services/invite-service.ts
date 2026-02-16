@@ -32,7 +32,7 @@ export class InviteService {
       invite_id: randomUUID(),
       group_id: groupId,
       created_by: createdBy,
-      invite_token: randomBytes(12).toString("base64url"),
+      invite_token: randomBytes(6).toString("base64url"),
       status: "pending",
       created_at: now.toISOString(),
       expires_at: expiresAt.toISOString(),
@@ -85,16 +85,23 @@ export class InviteService {
         TableName: this.invitesTable,
         IndexName: "group-invites-index",
         KeyConditionExpression: "group_id = :gid",
-        ExpressionAttributeValues: { ":gid": groupId },
+        FilterExpression: "#s = :status",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":gid": groupId,
+          ":status": "pending",
+        },
         ScanIndexForward: false,
       }),
     );
 
-    const invites = (result.Items ?? []) as Invite[];
-    return invites.filter((i) => i.status === "pending");
+    return (result.Items ?? []) as Invite[];
   }
 
-  async acceptInvite(invite: Invite): Promise<void> {
+  /** Validates that an invite is still usable (pending + not expired).
+   *  Invites are multi-use — any number of users can join via the same invite
+   *  until the group reaches capacity, the invite is revoked, or it expires. */
+  validateInvite(invite: Invite): void {
     if (invite.status !== "pending") {
       throw new GoneError("Invite has been revoked");
     }
@@ -102,16 +109,6 @@ export class InviteService {
     if (new Date(invite.expires_at) < new Date()) {
       throw new GoneError("Invite has expired");
     }
-
-    await this.docClient.send(
-      new UpdateCommand({
-        TableName: this.invitesTable,
-        Key: { invite_id: invite.invite_id },
-        UpdateExpression: "SET #s = :status",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: { ":status": "accepted" },
-      }),
-    );
   }
 
   async revokeInvite(inviteId: string, groupId: string): Promise<void> {

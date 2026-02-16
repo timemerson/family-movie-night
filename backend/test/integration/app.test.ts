@@ -88,6 +88,11 @@ describe("App integration", () => {
       expect(res.status).toBe(401);
     });
 
+    it("GET /groups/me returns 401 without auth", async () => {
+      const res = await unauthRequest("GET", "/groups/me");
+      expect(res.status).toBe(401);
+    });
+
     it("POST /groups/g-1/invites returns 401 without auth", async () => {
       const res = await unauthRequest("POST", "/groups/g-1/invites");
       expect(res.status).toBe(401);
@@ -121,8 +126,6 @@ describe("App integration", () => {
 
   describe("Global error handler", () => {
     it("returns structured error for HttpError", async () => {
-      // Trigger a request that will exercise the error handler
-      // by causing the DynamoDB mock to throw an HttpError
       mockSendFn.mockRejectedValueOnce(new HttpError(400, "Bad request"));
 
       const res = await authedRequest("GET", "/users/me");

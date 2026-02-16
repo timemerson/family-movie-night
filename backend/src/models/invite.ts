@@ -5,7 +5,7 @@ export const InviteSchema = z.object({
   group_id: z.string(),
   created_by: z.string(),
   invite_token: z.string(),
-  status: z.enum(["pending", "accepted", "revoked", "expired"]),
+  status: z.enum(["pending", "revoked", "expired"]),
   created_at: z.string(),
   expires_at: z.string(),
   ttl: z.number(),
