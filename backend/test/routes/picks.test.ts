@@ -13,6 +13,7 @@ vi.mock("../../src/lib/dynamo.js", () => {
   };
 });
 
+// @ts-expect-error __mockSend is injected by vi.mock
 import { __mockSend as mockSend } from "../../src/lib/dynamo.js";
 const mockSendFn = mockSend as unknown as ReturnType<typeof vi.fn>;
 
@@ -107,7 +108,7 @@ describe("Pick routes", () => {
       );
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.watched).toBe(true);
       expect(body.watched_at).toBeTruthy();
     });
@@ -170,7 +171,7 @@ describe("Pick routes", () => {
       const res = await makeRequest("GET", "/groups/g-1/watched");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.movie_ids).toEqual([550]);
     });
 

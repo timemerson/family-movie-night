@@ -13,6 +13,7 @@ vi.mock("../../src/lib/dynamo.js", () => {
   };
 });
 
+// @ts-expect-error __mockSend is injected by vi.mock
 import { __mockSend as mockSend } from "../../src/lib/dynamo.js";
 const mockSendFn = mockSend as unknown as ReturnType<typeof vi.fn>;
 
@@ -76,7 +77,7 @@ describe("Preference routes", () => {
       const res = await makeRequest("GET", "/groups/g-1/preferences");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.user_id).toBe("user-123");
       expect(body.group_id).toBe("g-1");
       expect(body.genre_likes).toEqual([]);
@@ -105,7 +106,7 @@ describe("Preference routes", () => {
       const res = await makeRequest("GET", "/groups/g-1/preferences");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.genre_likes).toEqual(["28", "35"]);
       expect(body.genre_dislikes).toEqual(["27"]);
       expect(body.max_content_rating).toBe("PG-13");
@@ -152,7 +153,7 @@ describe("Preference routes", () => {
       const res = await makeRequest("GET", "/groups/g-1/preferences/summary");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.liked_genres.sort()).toEqual(["16", "28", "35"]);
       expect(body.disliked_genres).toEqual(["27"]);
       expect(body.max_content_rating).toBe("PG");
@@ -179,7 +180,7 @@ describe("Preference routes", () => {
       const res = await makeRequest("GET", "/groups/g-1/preferences/summary");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.liked_genres).toEqual([]);
       expect(body.disliked_genres).toEqual([]);
       expect(body.max_content_rating).toBeNull();
@@ -205,7 +206,7 @@ describe("Preference routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.group_id).toBe("g-1");
       expect(body.user_id).toBe("user-123");
       expect(body.genre_likes).toEqual(["28", "35", "16"]);
@@ -230,7 +231,7 @@ describe("Preference routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.genre_dislikes).toEqual([]);
     });
 
@@ -281,7 +282,7 @@ describe("Preference routes", () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.error).toContain("overlap");
     });
 
@@ -349,7 +350,7 @@ describe("Preference routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.genre_likes).toEqual(["28", "35"]);
       expect(body.genre_dislikes).toEqual(["27"]);
     });
@@ -387,7 +388,7 @@ describe("Preference routes", () => {
         });
 
         expect(res.status).toBe(200);
-        const body = await res.json();
+        const body = await res.json() as any;
         expect(body.max_content_rating).toBe(rating);
       }
     });

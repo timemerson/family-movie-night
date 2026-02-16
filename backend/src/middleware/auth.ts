@@ -1,16 +1,21 @@
 import type { Context, Next } from "hono";
 import type { LambdaEvent } from "hono/aws-lambda";
 
-export interface AuthContext {
-  userId: string;
-  email: string;
-}
+export type AppEnv = {
+  Bindings: {
+    event: unknown;
+  };
+  Variables: {
+    userId: string;
+    email: string;
+  };
+};
 
 export function authMiddleware() {
-  return async (c: Context, next: Next) => {
+  return async (c: Context<AppEnv>, next: Next) => {
     const event = c.env?.event as LambdaEvent | undefined;
 
-    const authorizer = (event as Record<string, unknown>)?.requestContext as
+    const authorizer = (event as unknown as Record<string, unknown>)?.requestContext as
       | Record<string, unknown>
       | undefined;
     const jwt = (authorizer?.authorizer as Record<string, unknown>)?.jwt as

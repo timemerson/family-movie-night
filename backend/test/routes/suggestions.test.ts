@@ -17,6 +17,7 @@ vi.mock("../../src/lib/dynamo.js", () => {
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+// @ts-expect-error __mockSend is injected by vi.mock
 import { __mockSend as mockSend } from "../../src/lib/dynamo.js";
 const mockSendFn = mockSend as unknown as ReturnType<typeof vi.fn>;
 
@@ -171,7 +172,7 @@ describe("Suggestion routes", () => {
       const res = await makeRequest("GET", "/groups/g-1/suggestions");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.suggestions).toBeDefined();
       expect(body.suggestions.length).toBeGreaterThan(0);
       expect(body.suggestions.length).toBeLessThanOrEqual(5);
@@ -228,7 +229,7 @@ describe("Suggestion routes", () => {
       const res = await makeRequest("GET", "/groups/g-1/suggestions");
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.error).toContain("2 members");
     });
   });

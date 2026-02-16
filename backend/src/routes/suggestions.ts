@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { AppEnv } from "../middleware/auth.js";
 import { GroupService } from "../services/group-service.js";
 import { PreferenceService } from "../services/preference-service.js";
 import { PickService } from "../services/pick-service.js";
@@ -6,7 +7,7 @@ import { SuggestionService } from "../services/suggestion-service.js";
 import { TMDBClient } from "../services/tmdb-client.js";
 import { getDocClient, tableName } from "../lib/dynamo.js";
 
-const suggestions = new Hono();
+const suggestions = new Hono<AppEnv>();
 
 function getGroupService() {
   return new GroupService(
@@ -43,7 +44,7 @@ function getSuggestionService(streamingServices: string[]) {
 
 // GET /groups/:group_id/suggestions — get movie suggestions for the group
 suggestions.get("/groups/:group_id/suggestions", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const groupId = c.req.param("group_id");
 
   const groupService = getGroupService();

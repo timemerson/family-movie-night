@@ -13,6 +13,7 @@ vi.mock("../../src/lib/dynamo.js", () => {
   };
 });
 
+// @ts-expect-error __mockSend is injected by vi.mock
 import { __mockSend as mockSend } from "../../src/lib/dynamo.js";
 const mockSendFn = mockSend as unknown as ReturnType<typeof vi.fn>;
 
@@ -72,7 +73,7 @@ describe("Group routes", () => {
       const res = await makeRequest("GET", "/groups/me");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.group).toBeNull();
     });
 
@@ -109,7 +110,7 @@ describe("Group routes", () => {
       const res = await makeRequest("GET", "/groups/me");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.name).toBe("The Emersons");
       expect(body.members).toHaveLength(1);
     });
@@ -136,7 +137,7 @@ describe("Group routes", () => {
       });
 
       expect(res.status).toBe(201);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.name).toBe("The Emersons");
       expect(body.created_by).toBe("user-123");
       expect(body.member_count).toBe(1);
@@ -185,7 +186,7 @@ describe("Group routes", () => {
       });
 
       expect(res.status).toBe(201);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.name).toBe(name40);
     });
 
@@ -234,7 +235,7 @@ describe("Group routes", () => {
       const res = await makeRequest("GET", "/groups/g-1");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.name).toBe("Test Group");
       expect(body.members).toHaveLength(1);
     });
@@ -270,7 +271,7 @@ describe("Group routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.name).toBe("New Name");
     });
 
@@ -331,7 +332,7 @@ describe("Group routes", () => {
       const res = await makeRequest("POST", "/groups/g-1/invites");
 
       expect(res.status).toBe(201);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.invite_token).toBeTruthy();
       expect(body.invite_url).toContain("familymovienight.app/invite/");
       expect(body.status).toBe("pending");
@@ -369,7 +370,7 @@ describe("Group routes", () => {
       const res = await makeRequest("GET", "/groups/g-1/invites");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.invites).toHaveLength(1);
       expect(body.invites[0].invite_id).toBe("i-1");
     });
@@ -442,7 +443,7 @@ describe("Group routes", () => {
       const res = await makeRequest("POST", "/invites/abc123/accept");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.group_id).toBe("g-1");
       expect(body.group_name).toBe("The Emersons");
       expect(body.role).toBe("member");
@@ -561,7 +562,7 @@ describe("Group routes", () => {
       );
 
       expect(res.status).toBe(409);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.error).toContain("full");
     });
   });

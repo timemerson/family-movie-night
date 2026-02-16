@@ -247,7 +247,7 @@ export class GroupService {
         err instanceof Error &&
         err.name === "TransactionCanceledException"
       ) {
-        const reasons = (err as Record<string, unknown>)
+        const reasons = (err as unknown as Record<string, unknown>)
           .CancellationReasons as Array<{ Code: string }> | undefined;
         if (reasons?.[1]?.Code === "ConditionalCheckFailed") {
           throw new ConflictError("Already a member of this group");
