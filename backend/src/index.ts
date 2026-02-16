@@ -3,6 +3,7 @@ import { handle } from "hono/aws-lambda";
 import { authMiddleware } from "./middleware/auth.js";
 import { users } from "./routes/users.js";
 import { groups } from "./routes/groups.js";
+import { preferences } from "./routes/preferences.js";
 import { HttpError } from "./lib/errors.js";
 
 const app = new Hono();
@@ -16,6 +17,7 @@ app.use("/*", authMiddleware());
 // Routes
 app.route("/", users);
 app.route("/", groups);
+app.route("/", preferences);
 
 // Global error handler
 app.onError((err, c) => {

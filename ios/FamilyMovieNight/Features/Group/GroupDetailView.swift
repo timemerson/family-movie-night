@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GroupDetailView: View {
     @ObservedObject var viewModel: GroupViewModel
+    @StateObject private var preferencesViewModel = PreferencesViewModel()
     @State private var showShareSheet = false
     @State private var showLeaveConfirmation = false
 
@@ -25,6 +26,12 @@ struct GroupDetailView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                    }
+                }
+
+                Section {
+                    NavigationLink("My Preferences") {
+                        PreferencesView(viewModel: preferencesViewModel)
                     }
                 }
 
@@ -70,6 +77,11 @@ struct GroupDetailView: View {
                 }
             } message: {
                 Text("You'll need a new invite to rejoin.")
+            }
+            .onAppear {
+                if let apiClient = viewModel.apiClient {
+                    preferencesViewModel.configure(apiClient: apiClient, groupId: group.groupId)
+                }
             }
         }
     }

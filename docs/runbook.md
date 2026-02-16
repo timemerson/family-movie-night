@@ -104,9 +104,18 @@ cd backend/cdk && npx cdk deploy '*-Auth'
 - `DELETE /groups/{group_id}/invites/{invite_id}` — revoke invite (creator only)
 - `POST /invites/{invite_token}/accept` — accept invite and join group
 
+### Preferences (Task 04)
+- `GET /groups/{group_id}/preferences` — get current user's genre/rating preferences (members only)
+- `PUT /groups/{group_id}/preferences` — set or replace preferences (members only)
+
+#### Validation
+- `genre_likes` must have at least 2 entries
+- `genre_likes` and `genre_dislikes` must not overlap
+- `max_content_rating` must be one of: `G`, `PG`, `PG-13`, `R`
+
 ### Authorization Rules
 - **JWT required** on all endpoints except `GET /health`
-- **Member check**: GET group, leave group — user must be in GroupMemberships for that group
+- **Member check**: GET group, leave group, get/set preferences — user must be in GroupMemberships for that group
 - **Creator check**: update group, create/list/revoke invites — membership role must be `creator`
 - **One group per user** (v1): creating or joining a group returns 409 if user already belongs to one
 - **Group size cap**: 8 members max — accepting an invite returns 409 if full
@@ -132,6 +141,22 @@ cd backend/cdk && npx cdk deploy '*-Auth'
    ```bash
    curl -X POST -H "Authorization: Bearer <other-user-token>" \
      https://<api-endpoint>/invites/<invite_token>/accept
+   ```
+
+### Testing Preferences Locally
+
+1. **Set preferences:**
+   ```bash
+   curl -X PUT -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{"genre_likes": ["28", "35", "16"], "genre_dislikes": ["27"], "max_content_rating": "PG-13"}' \
+     https://<api-endpoint>/groups/<group_id>/preferences
+   ```
+
+2. **Get preferences:**
+   ```bash
+   curl -H "Authorization: Bearer <token>" \
+     https://<api-endpoint>/groups/<group_id>/preferences
    ```
 
 ## CDK Deployment
