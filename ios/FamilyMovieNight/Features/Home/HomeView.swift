@@ -22,7 +22,7 @@ struct HomeView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Sign Out") {
-                        authService.signOut()
+                        Task { await authService.signOut() }
                     }
                 }
             }

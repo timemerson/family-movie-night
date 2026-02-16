@@ -78,6 +78,7 @@ class AuthViewModel: ObservableObject {
         errorMessage = nil
         do {
             try await authService.confirmSignUp(email: email, code: verificationCode)
+            try await authService.signIn(email: email, password: password)
         } catch {
             errorMessage = error.localizedDescription
         }
