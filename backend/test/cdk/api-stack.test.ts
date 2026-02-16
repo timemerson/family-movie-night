@@ -70,6 +70,29 @@ describe("ApiStack", () => {
     });
   });
 
+  it("grants Lambda read-write access to tmdbCacheTable", () => {
+    const json = JSON.stringify(template.toJSON());
+    // Verify the IAM policy references the TmdbCache table via cross-stack import
+    expect(json).toContain("TmdbCache");
+    // And that grantReadWriteData produces DynamoDB actions
+    expect(json).toContain("dynamodb:PutItem");
+  });
+
+  it("resolves TMDB_API_KEY from SSM Parameter Store", () => {
+    const json = JSON.stringify(template.toJSON());
+    // CDK should produce a dynamic SSM reference, not a plaintext value
+    expect(json).toContain("/family-movie-night/tmdb-api-key");
+    // Verify it appears as a Lambda environment variable
+    template.hasResourceProperties("AWS::Lambda::Function", {
+      Environment: {
+        Variables: Match.objectLike({
+          TMDB_API_KEY: Match.anyValue(),
+          TMDB_CACHE_TABLE: Match.anyValue(),
+        }),
+      },
+    });
+  });
+
   it("catch-all route uses JWT authorizer", () => {
     const routes = template.findResources("AWS::ApiGatewayV2::Route", {
       Properties: {

@@ -113,6 +113,18 @@ cd backend/cdk && npx cdk deploy '*-Auth'
 - `genre_likes` and `genre_dislikes` must not overlap
 - `max_content_rating` must be one of: `G`, `PG`, `PG-13`, `R`
 
+### Picks (Task 04-B)
+- `POST /groups/{group_id}/picks/{pick_id}/watched` — mark a pick as watched (members only)
+- `GET /groups/{group_id}/watched` — get watched movie IDs for a group (members only)
+
+### Suggestions (Task 05)
+- `GET /groups/{group_id}/suggestions` — get 3–5 movie suggestions for the group (members only)
+  - Optional query param: `exclude_movie_ids` (comma-separated TMDB IDs) for "Show Me More"
+  - Requires at least 2 members with preferences set (returns 400 otherwise)
+  - Returns `{ suggestions: [...], relaxed_constraints: [...] }`
+  - Each suggestion includes: `tmdb_movie_id`, `title`, `year`, `poster_path`, `overview`, `genres`, `content_rating`, `popularity`, `vote_average`, `streaming`, `score`, `reason`
+  - Algorithm: ADR-0003 five-stage filter-and-rank pipeline (aggregate prefs → TMDB discover → filter exclusions → score/rank → return top 5)
+
 ### Authorization Rules
 - **JWT required** on all endpoints except `GET /health`
 - **Member check**: GET group, leave group, get/set preferences — user must be in GroupMemberships for that group
@@ -157,6 +169,46 @@ cd backend/cdk && npx cdk deploy '*-Auth'
    ```bash
    curl -H "Authorization: Bearer <token>" \
      https://<api-endpoint>/groups/<group_id>/preferences
+   ```
+
+### Testing Suggestions Locally
+
+**Prerequisites:** You need a TMDB API key (free at https://www.themoviedb.org/settings/api). Store it in SSM Parameter Store before deploying:
+```bash
+aws ssm put-parameter \
+  --name "/family-movie-night/tmdb-api-key" \
+  --type String \
+  --value "<your-tmdb-api-key>"
+```
+The CDK stack reads this parameter at deploy time and injects it into the Lambda environment.
+
+1. **Ensure at least 2 members have set preferences** (see "Testing Preferences" above).
+
+2. **Get suggestions:**
+   ```bash
+   curl -H "Authorization: Bearer <token>" \
+     https://<api-endpoint>/groups/<group_id>/suggestions
+   ```
+
+3. **"Show Me More" — exclude previous batch:**
+   ```bash
+   curl -H "Authorization: Bearer <token>" \
+     "https://<api-endpoint>/groups/<group_id>/suggestions?exclude_movie_ids=550,680,120"
+   ```
+
+4. **Verify 400 when <2 members have preferences:**
+   ```bash
+   # Use a group where only 1 member has set preferences
+   curl -H "Authorization: Bearer <token>" \
+     https://<api-endpoint>/groups/<group_id>/suggestions
+   # Expected: 400 with error message
+   ```
+
+5. **Verify 403 for non-member:**
+   ```bash
+   curl -H "Authorization: Bearer <other-user-token>" \
+     https://<api-endpoint>/groups/<group_id>/suggestions
+   # Expected: 403
    ```
 
 ## CDK Deployment
