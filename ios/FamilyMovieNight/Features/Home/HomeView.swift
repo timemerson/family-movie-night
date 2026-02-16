@@ -29,7 +29,7 @@ struct HomeView: View {
         }
         .task {
             let client = APIClient(
-                baseURL: URL(string: "https://api.familymovienight.app")!,
+                baseURL: URL(string: "https://ikg34rhjk0.execute-api.us-east-1.amazonaws.com")!,
                 authService: authService
             )
             groupViewModel.configure(
