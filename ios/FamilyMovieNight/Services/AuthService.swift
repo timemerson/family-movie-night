@@ -4,9 +4,11 @@ import Foundation
 class AuthService: ObservableObject {
     @Published var isAuthenticated = false
     @Published var accessToken: String?
+    @Published var userId: String?
 
     // TODO: Replace with actual Cognito integration (Amplify Auth or AWS SDK)
     // Token storage should use iOS Keychain, not UserDefaults
+    // userId should be set to the Cognito `sub` claim from the JWT
 
     func signIn(email: String, password: String) async throws {
         // TODO: Call Cognito InitiateAuth with SRP
@@ -30,6 +32,7 @@ class AuthService: ObservableObject {
 
     func signOut() {
         accessToken = nil
+        userId = nil
         isAuthenticated = false
         // TODO: Clear Keychain tokens, revoke Cognito session
     }

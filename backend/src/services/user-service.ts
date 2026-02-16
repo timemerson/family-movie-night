@@ -44,13 +44,32 @@ export class UserService {
       },
     };
 
-    await this.docClient.send(
-      new PutCommand({
-        TableName: this.tableName,
-        Item: user,
-        ConditionExpression: "attribute_not_exists(user_id)",
-      }),
-    );
+    try {
+      await this.docClient.send(
+        new PutCommand({
+          TableName: this.tableName,
+          Item: user,
+          ConditionExpression: "attribute_not_exists(user_id)",
+        }),
+      );
+    } catch (err: unknown) {
+      if (
+        err instanceof Error &&
+        err.name === "ConditionalCheckFailedException"
+      ) {
+        // Another request created the user first — fetch and return it
+        const retry = await this.docClient.send(
+          new GetCommand({
+            TableName: this.tableName,
+            Key: { user_id: userId },
+          }),
+        );
+        if (retry.Item) {
+          return retry.Item as User;
+        }
+      }
+      throw err;
+    }
 
     return user;
   }

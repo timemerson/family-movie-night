@@ -22,9 +22,23 @@ export class ForbiddenError extends HttpError {
   }
 }
 
+export class ValidationError extends HttpError {
+  constructor(message = "Validation error") {
+    super(400, message);
+    this.name = "ValidationError";
+  }
+}
+
 export class ConflictError extends HttpError {
   constructor(message = "Conflict") {
     super(409, message);
     this.name = "ConflictError";
+  }
+}
+
+export class GoneError extends HttpError {
+  constructor(message = "Gone") {
+    super(410, message);
+    this.name = "GoneError";
   }
 }

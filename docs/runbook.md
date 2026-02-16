@@ -86,6 +86,54 @@ cd backend/cdk && npx cdk deploy '*-Auth'
    curl https://<api-endpoint>/health
    ```
 
+## API Endpoints
+
+### Users (Task 02)
+- `GET /users/me` — get or create current user (JIT provisioning)
+- `DELETE /users/me` — delete account
+
+### Groups (Task 03)
+- `POST /groups` — create a new group (one group per user in v1)
+- `GET /groups/{group_id}` — get group details + members (members only)
+- `PATCH /groups/{group_id}` — update group name/streaming services (creator only)
+- `DELETE /groups/{group_id}/members/me` — leave the group
+
+### Invites (Task 03)
+- `POST /groups/{group_id}/invites` — generate invite link (creator only)
+- `GET /groups/{group_id}/invites` — list pending invites (creator only)
+- `DELETE /groups/{group_id}/invites/{invite_id}` — revoke invite (creator only)
+- `POST /invites/{invite_token}/accept` — accept invite and join group
+
+### Authorization Rules
+- **JWT required** on all endpoints except `GET /health`
+- **Member check**: GET group, leave group — user must be in GroupMemberships for that group
+- **Creator check**: update group, create/list/revoke invites — membership role must be `creator`
+- **One group per user** (v1): creating or joining a group returns 409 if user already belongs to one
+- **Group size cap**: 8 members max — accepting an invite returns 409 if full
+- **Invite expiry**: invites expire after 7 days; accepting returns 410 if expired/revoked
+
+### Testing Groups & Invites Locally
+
+1. **Create a group:**
+   ```bash
+   curl -X POST -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{"name": "The Emersons"}' \
+     https://<api-endpoint>/groups
+   ```
+
+2. **Create an invite:**
+   ```bash
+   curl -X POST -H "Authorization: Bearer <token>" \
+     https://<api-endpoint>/groups/<group_id>/invites
+   ```
+
+3. **Accept an invite** (as a different user):
+   ```bash
+   curl -X POST -H "Authorization: Bearer <other-user-token>" \
+     https://<api-endpoint>/invites/<invite_token>/accept
+   ```
+
 ## CDK Deployment
 
 ### Deploy all stacks
