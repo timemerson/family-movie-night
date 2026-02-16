@@ -78,7 +78,11 @@ describe("ApiStack", () => {
     expect(json).toContain("dynamodb:PutItem");
   });
 
-  it("includes TMDB_API_KEY in Lambda environment", () => {
+  it("resolves TMDB_API_KEY from SSM Parameter Store", () => {
+    const json = JSON.stringify(template.toJSON());
+    // CDK should produce a dynamic SSM reference, not a plaintext value
+    expect(json).toContain("/family-movie-night/tmdb-api-key");
+    // Verify it appears as a Lambda environment variable
     template.hasResourceProperties("AWS::Lambda::Function", {
       Environment: {
         Variables: Match.objectLike({

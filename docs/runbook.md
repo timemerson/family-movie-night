@@ -173,7 +173,14 @@ cd backend/cdk && npx cdk deploy '*-Auth'
 
 ### Testing Suggestions Locally
 
-**Prerequisites:** You need a TMDB API key (free at https://www.themoviedb.org/settings/api). Set it as CDK context variable `tmdbApiKey` or directly as `TMDB_API_KEY` Lambda env var.
+**Prerequisites:** You need a TMDB API key (free at https://www.themoviedb.org/settings/api). Store it in SSM Parameter Store before deploying:
+```bash
+aws ssm put-parameter \
+  --name "/family-movie-night/tmdb-api-key" \
+  --type String \
+  --value "<your-tmdb-api-key>"
+```
+The CDK stack reads this parameter at deploy time and injects it into the Lambda environment.
 
 1. **Ensure at least 2 members have set preferences** (see "Testing Preferences" above).
 

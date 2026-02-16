@@ -1,5 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import * as apigwv2Integrations from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as apigwv2Authorizers from "aws-cdk-lib/aws-apigatewayv2-authorizers";
@@ -21,6 +22,13 @@ export class ApiStack extends cdk.Stack {
 
     const { dataStack, authStack } = props;
 
+    // TMDB API key stored in SSM Parameter Store (must be created before first deploy)
+    const tmdbApiKeyParam = ssm.StringParameter.fromStringParameterName(
+      this,
+      "TmdbApiKeyParam",
+      "/family-movie-night/tmdb-api-key",
+    );
+
     // Lambda function
     this.handler = new lambda.Function(this, "Handler", {
       functionName: `${id}-Handler`,
@@ -41,7 +49,7 @@ export class ApiStack extends cdk.Stack {
         PICKS_TABLE: dataStack.picksTable.tableName,
         RATINGS_TABLE: dataStack.ratingsTable.tableName,
         TMDB_CACHE_TABLE: dataStack.tmdbCacheTable.tableName,
-        TMDB_API_KEY: this.node.tryGetContext("tmdbApiKey") ?? "",
+        TMDB_API_KEY: tmdbApiKeyParam.stringValue,
       },
     });
 

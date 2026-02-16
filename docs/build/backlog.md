@@ -44,7 +44,15 @@ See [task-04-followups.md](task-04-followups.md) for full details on each follow
 
 ### Task 05 — Suggestions endpoint + UI
 - [x] (done) Suggestions endpoint + iOS "Tonight's Suggestions" UI
-  - Delivered: TMDB client with DynamoDB caching, five-stage filter-and-rank suggestion algorithm (ADR-0003), `GET /groups/:id/suggestions` endpoint with exclude_movie_ids support, "reason" fields explaining why each movie was suggested, constraint relaxation with banner, CDK IAM grants for tmdbCacheTable, TMDB_API_KEY env var, algorithm unit tests (10 cases), route auth/permission tests, iOS SuggestionsView with poster cards + "Show Me More" refresh, runbook with exact curl steps.
+  - Delivered: TMDB client with DynamoDB caching, five-stage filter-and-rank suggestion algorithm (ADR-0003), `GET /groups/:id/suggestions` endpoint with exclude_movie_ids support, "reason" fields explaining why each movie was suggested, constraint relaxation with banner, CDK IAM grants for tmdbCacheTable, TMDB_API_KEY via SSM Parameter Store, algorithm unit tests (10 cases), route auth/permission tests, iOS SuggestionsView with poster cards + "Show Me More" refresh, runbook with exact curl steps.
+- [ ] (ready) **05-A: Cache null-handling bug in getContentRating** — P1
+- [ ] (ready) **05-B: Validate TMDB API key at startup** — P1
+- [ ] (ready) **05-C: Clean up empty with_genres param** — P2
+- [ ] (ready) **05-D: Missing ADR-0003** — P2
+- [ ] (ready) **05-E: Cap exclude_movie_ids growth in iOS** — P2
+- [ ] (ready) **05-F: Wire up content_rating field** — P2
+
+See [task-05-followups.md](task-05-followups.md) for full details on each follow-up.
 
 ---
 
