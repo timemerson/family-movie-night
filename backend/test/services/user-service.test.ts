@@ -74,6 +74,37 @@ describe("UserService", () => {
 
       expect(result.display_name).toBe("Tim");
     });
+
+    it("handles concurrent creation (ConditionalCheckFailedException) by re-fetching", async () => {
+      // First call: user doesn't exist
+      mockClient.send.mockResolvedValueOnce({ Item: undefined });
+      // Second call: PutCommand fails due to race condition
+      const conditionalError = new Error("The conditional request failed");
+      conditionalError.name = "ConditionalCheckFailedException";
+      mockClient.send.mockRejectedValueOnce(conditionalError);
+      // Third call: re-fetch the user created by the other request
+      const raceCreatedUser = {
+        user_id: "user-race",
+        email: "race@example.com",
+        display_name: "race",
+        avatar_key: "avatar_bear",
+        created_at: "2026-01-01T00:00:00Z",
+        notification_prefs: {
+          vote_nudge: true,
+          pick_announce: true,
+          new_round: true,
+        },
+      };
+      mockClient.send.mockResolvedValueOnce({ Item: raceCreatedUser });
+
+      const result = await service.getOrCreateUser(
+        "user-race",
+        "race@example.com",
+      );
+
+      expect(result).toEqual(raceCreatedUser);
+      expect(mockClient.send).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe("deleteUser", () => {
