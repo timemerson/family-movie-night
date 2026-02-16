@@ -1,3 +1,5 @@
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import * as cdk from "aws-cdk-lib";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as ssm from "aws-cdk-lib/aws-ssm";
@@ -7,6 +9,9 @@ import * as apigwv2Authorizers from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { Construct } from "constructs";
 import type { DataStack } from "./data-stack.js";
 import type { AuthStack } from "./auth-stack.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export interface ApiStackProps extends cdk.StackProps {
   dataStack: DataStack;
@@ -34,7 +39,7 @@ export class ApiStack extends cdk.Stack {
       functionName: `${id}-Handler`,
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: "index.handler",
-      code: lambda.Code.fromAsset("../dist/src"),
+      code: lambda.Code.fromAsset(path.join(__dirname, "../../dist/lambda")),
       memorySize: 256,
       timeout: cdk.Duration.seconds(15),
       environment: {
