@@ -41,6 +41,7 @@ export class ApiStack extends cdk.Stack {
         PICKS_TABLE: dataStack.picksTable.tableName,
         RATINGS_TABLE: dataStack.ratingsTable.tableName,
         TMDB_CACHE_TABLE: dataStack.tmdbCacheTable.tableName,
+        TMDB_API_KEY: this.node.tryGetContext("tmdbApiKey") ?? "",
       },
     });
 
@@ -51,6 +52,7 @@ export class ApiStack extends cdk.Stack {
     dataStack.invitesTable.grantReadWriteData(this.handler);
     dataStack.preferencesTable.grantReadWriteData(this.handler);
     dataStack.picksTable.grantReadWriteData(this.handler);
+    dataStack.tmdbCacheTable.grantReadWriteData(this.handler);
 
     // JWT Authorizer using Cognito
     const issuerUrl = `https://cognito-idp.${this.region}.amazonaws.com/${authStack.userPool.userPoolId}`;

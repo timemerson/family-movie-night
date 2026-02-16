@@ -33,8 +33,8 @@ Use this as a lightweight issue tracker if not using GitHub Issues yet.
 ### Task 04 — Preferences + watched history (minimal)
 - [x] (done — partial) Preferences CRUD + iOS UI
   - Merged 2026-02-16 (PR #8). Delivered: preference model (Zod), preference-service (get/put), preference routes (GET/PUT `/groups/:id/preferences`), IAM grant for preferencesTable, preference service + route tests, iOS preferences UI (PreferencesView, ViewModel, Model).
-- [ ] (ready) **04-A: Group preference summary endpoint** — P0, blocks Task 05
-- [ ] (ready) **04-B: Pick model + watched history endpoints** — P0, blocks Task 05
+- [x] (done) **04-A: Group preference summary endpoint** — Merged (PR #9)
+- [x] (done) **04-B: Pick model + watched history endpoints** — Merged (PR #10)
 - [ ] (ready) **04-C: Preference cleanup on group leave** — P1
 - [ ] (ready) **04-D: TMDB genre ID validation** — P2
 
@@ -43,9 +43,8 @@ See [task-04-followups.md](task-04-followups.md) for full details on each follow
 ---
 
 ### Task 05 — Suggestions endpoint + UI
-- [ ] (blocked — waiting on 04-A + 04-B) Suggestions endpoint + UI
-  - TMDB integration, suggestion algorithm, voting flow, iOS suggestion + voting UI
-  - Blocked by: preference summary endpoint (04-A) and watched movie exclusion (04-B)
+- [x] (done) Suggestions endpoint + iOS "Tonight's Suggestions" UI
+  - Delivered: TMDB client with DynamoDB caching, five-stage filter-and-rank suggestion algorithm (ADR-0003), `GET /groups/:id/suggestions` endpoint with exclude_movie_ids support, "reason" fields explaining why each movie was suggested, constraint relaxation with banner, CDK IAM grants for tmdbCacheTable, TMDB_API_KEY env var, algorithm unit tests (10 cases), route auth/permission tests, iOS SuggestionsView with poster cards + "Show Me More" refresh, runbook with exact curl steps.
 
 ---
 
@@ -53,7 +52,7 @@ See [task-04-followups.md](task-04-followups.md) for full details on each follow
 
 ```
 04-A (pref summary) ──┐
-                       ├──► Task 05 (suggestions)
+                       ├──► Task 05 (suggestions) ✅
 04-B (picks/watched) ──┘
 
 04-C (cleanup on leave) ──► independent, do anytime

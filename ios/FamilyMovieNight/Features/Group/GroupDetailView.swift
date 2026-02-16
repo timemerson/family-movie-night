@@ -3,6 +3,7 @@ import SwiftUI
 struct GroupDetailView: View {
     @ObservedObject var viewModel: GroupViewModel
     @StateObject private var preferencesViewModel = PreferencesViewModel()
+    @StateObject private var suggestionsViewModel = SuggestionsViewModel()
     @State private var showShareSheet = false
     @State private var showLeaveConfirmation = false
 
@@ -26,6 +27,14 @@ struct GroupDetailView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                    }
+                }
+
+                Section {
+                    NavigationLink {
+                        SuggestionsView(viewModel: suggestionsViewModel)
+                    } label: {
+                        Label("Suggest Movies", systemImage: "sparkles")
                     }
                 }
 
@@ -81,6 +90,7 @@ struct GroupDetailView: View {
             .onAppear {
                 if let apiClient = viewModel.apiClient {
                     preferencesViewModel.configure(apiClient: apiClient, groupId: group.groupId)
+                    suggestionsViewModel.configure(apiClient: apiClient, groupId: group.groupId)
                 }
             }
         }

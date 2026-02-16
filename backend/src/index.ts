@@ -5,6 +5,7 @@ import { users } from "./routes/users.js";
 import { groups } from "./routes/groups.js";
 import { preferences } from "./routes/preferences.js";
 import { picks } from "./routes/picks.js";
+import { suggestions } from "./routes/suggestions.js";
 import { HttpError } from "./lib/errors.js";
 
 const app = new Hono();
@@ -20,6 +21,7 @@ app.route("/", users);
 app.route("/", groups);
 app.route("/", preferences);
 app.route("/", picks);
+app.route("/", suggestions);
 
 // Global error handler
 app.onError((err, c) => {
