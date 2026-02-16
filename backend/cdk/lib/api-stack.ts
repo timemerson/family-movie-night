@@ -34,7 +34,7 @@ export class ApiStack extends cdk.Stack {
       functionName: `${id}-Handler`,
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: "index.handler",
-      code: lambda.Code.fromAsset("dist"),
+      code: lambda.Code.fromAsset("../dist/src"),
       memorySize: 256,
       timeout: cdk.Duration.seconds(15),
       environment: {
