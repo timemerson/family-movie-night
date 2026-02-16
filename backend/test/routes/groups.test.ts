@@ -163,6 +163,41 @@ describe("Group routes", () => {
 
       expect(res.status).toBe(400);
     });
+
+    it("accepts a 40-character name (boundary)", async () => {
+      const name40 = "A".repeat(40);
+      // getUserGroup — no existing group
+      mockSendFn.mockResolvedValueOnce({ Items: [] });
+      // getOrCreateUser
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          user_id: "user-123",
+          email: "test@example.com",
+          display_name: "Tim",
+          avatar_key: "avatar_bear",
+        },
+      });
+      // TransactWriteCommand
+      mockSendFn.mockResolvedValueOnce({});
+
+      const res = await makeRequest("POST", "/groups", {
+        body: { name: name40 },
+      });
+
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.name).toBe(name40);
+    });
+
+    it("returns 400 for a 41-character name (over boundary)", async () => {
+      const name41 = "A".repeat(41);
+
+      const res = await makeRequest("POST", "/groups", {
+        body: { name: name41 },
+      });
+
+      expect(res.status).toBe(400);
+    });
   });
 
   describe("GET /groups/:group_id", () => {
@@ -213,6 +248,53 @@ describe("Group routes", () => {
     });
   });
 
+  describe("PATCH /groups/:group_id", () => {
+    it("updates group when called by creator", async () => {
+      // requireCreator — GetCommand (membership)
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "creator" },
+      });
+      // UpdateCommand returns updated group
+      mockSendFn.mockResolvedValueOnce({
+        Attributes: {
+          group_id: "g-1",
+          name: "New Name",
+          created_by: "user-123",
+          streaming_services: ["netflix"],
+          member_count: 1,
+        },
+      });
+
+      const res = await makeRequest("PATCH", "/groups/g-1", {
+        body: { name: "New Name", streaming_services: ["netflix"] },
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.name).toBe("New Name");
+    });
+
+    it("returns 403 for non-creator member", async () => {
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+
+      const res = await makeRequest("PATCH", "/groups/g-1", {
+        body: { name: "New Name" },
+      });
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 400 for invalid update payload", async () => {
+      const res = await makeRequest("PATCH", "/groups/g-1", {
+        body: { name: "" },
+      });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe("DELETE /groups/:group_id/members/me", () => {
     it("allows a member to leave the group", async () => {
       // getMembership
@@ -225,6 +307,15 @@ describe("Group routes", () => {
       const res = await makeRequest("DELETE", "/groups/g-1/members/me");
 
       expect(res.status).toBe(204);
+    });
+
+    it("returns 404 when user is not a member", async () => {
+      // getMembership — not found
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+
+      const res = await makeRequest("DELETE", "/groups/g-1/members/me");
+
+      expect(res.status).toBe(404);
     });
   });
 
@@ -252,6 +343,72 @@ describe("Group routes", () => {
       });
 
       const res = await makeRequest("POST", "/groups/g-1/invites");
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe("GET /groups/:group_id/invites", () => {
+    it("returns pending invites for creator", async () => {
+      // requireCreator
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "creator" },
+      });
+      // listGroupInvites
+      mockSendFn.mockResolvedValueOnce({
+        Items: [
+          {
+            invite_id: "i-1",
+            status: "pending",
+            created_at: "2026-01-01T00:00:00Z",
+            expires_at: "2026-01-08T00:00:00Z",
+          },
+        ],
+      });
+
+      const res = await makeRequest("GET", "/groups/g-1/invites");
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.invites).toHaveLength(1);
+      expect(body.invites[0].invite_id).toBe("i-1");
+    });
+
+    it("returns 403 for non-creator", async () => {
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+
+      const res = await makeRequest("GET", "/groups/g-1/invites");
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe("DELETE /groups/:group_id/invites/:invite_id", () => {
+    it("revokes an invite for creator", async () => {
+      // requireCreator
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "creator" },
+      });
+      // getInviteById
+      mockSendFn.mockResolvedValueOnce({
+        Item: { invite_id: "i-1", group_id: "g-1", status: "pending" },
+      });
+      // UpdateCommand (revoke)
+      mockSendFn.mockResolvedValueOnce({});
+
+      const res = await makeRequest("DELETE", "/groups/g-1/invites/i-1");
+
+      expect(res.status).toBe(204);
+    });
+
+    it("returns 403 for non-creator", async () => {
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+
+      const res = await makeRequest("DELETE", "/groups/g-1/invites/i-1");
 
       expect(res.status).toBe(403);
     });
@@ -336,6 +493,76 @@ describe("Group routes", () => {
       const res = await makeRequest("POST", "/invites/abc123/accept");
 
       expect(res.status).toBe(409);
+    });
+
+    it("returns 410 for revoked invite", async () => {
+      const futureDate = new Date(Date.now() + 86400000).toISOString();
+
+      // getInviteByToken — invite is revoked
+      mockSendFn.mockResolvedValueOnce({
+        Items: [
+          {
+            invite_id: "i-1",
+            group_id: "g-1",
+            invite_token: "revoked-token",
+            status: "revoked",
+            expires_at: futureDate,
+          },
+        ],
+      });
+
+      const res = await makeRequest("POST", "/invites/revoked-token/accept");
+
+      expect(res.status).toBe(410);
+    });
+
+    it("returns 404 for non-existent invite token", async () => {
+      // getInviteByToken — no results
+      mockSendFn.mockResolvedValueOnce({ Items: [] });
+
+      const res = await makeRequest("POST", "/invites/bogus-token/accept");
+
+      expect(res.status).toBe(404);
+    });
+
+    it("returns 409 when group is full (8 members)", async () => {
+      const futureDate = new Date(Date.now() + 86400000).toISOString();
+
+      // getInviteByToken
+      mockSendFn.mockResolvedValueOnce({
+        Items: [
+          {
+            invite_id: "i-1",
+            group_id: "g-1",
+            invite_token: "full-group-token",
+            status: "pending",
+            expires_at: futureDate,
+          },
+        ],
+      });
+      // getUserGroup — no existing group
+      mockSendFn.mockResolvedValueOnce({ Items: [] });
+      // getGroup
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", name: "Full Group", member_count: 8 },
+      });
+      // addMember — TransactWriteCommand fails (group full)
+      const txError = new Error("Transaction cancelled");
+      txError.name = "TransactionCanceledException";
+      (txError as any).CancellationReasons = [
+        { Code: "ConditionalCheckFailed" },
+        { Code: "None" },
+      ];
+      mockSendFn.mockRejectedValueOnce(txError);
+
+      const res = await makeRequest(
+        "POST",
+        "/invites/full-group-token/accept",
+      );
+
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error).toContain("full");
     });
   });
 });

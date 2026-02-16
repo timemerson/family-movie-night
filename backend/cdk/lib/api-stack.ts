@@ -44,8 +44,11 @@ export class ApiStack extends cdk.Stack {
       },
     });
 
-    // Grant DynamoDB access to the Users table (auth task scope)
+    // Grant DynamoDB access
     dataStack.usersTable.grantReadWriteData(this.handler);
+    dataStack.groupsTable.grantReadWriteData(this.handler);
+    dataStack.groupMembershipsTable.grantReadWriteData(this.handler);
+    dataStack.invitesTable.grantReadWriteData(this.handler);
 
     // JWT Authorizer using Cognito
     const issuerUrl = `https://cognito-idp.${this.region}.amazonaws.com/${authStack.userPool.userPoolId}`;
