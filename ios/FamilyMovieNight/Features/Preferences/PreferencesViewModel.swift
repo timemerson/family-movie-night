@@ -1,5 +1,8 @@
 import Combine
 import SwiftUI
+import os
+
+private let logger = Logger(subsystem: "org.timemerson.FamilyMovieNight", category: "Preferences")
 
 @MainActor
 class PreferencesViewModel: ObservableObject {
@@ -20,16 +23,22 @@ class PreferencesViewModel: ObservableObject {
 
     func configure(apiClient: APIClient, groupId: String) {
         guard self.apiClient == nil else { return }
+        logger.info("configure: groupId=\(groupId)")
         self.apiClient = apiClient
         self.groupId = groupId
     }
 
     func loadPreferences() async {
-        guard let apiClient, let groupId else { return }
+        guard let apiClient, let groupId else {
+            logger.warning("loadPreferences: skipped — apiClient or groupId is nil")
+            return
+        }
+        logger.info("loadPreferences: loading for group \(groupId)")
         isLoading = true
         error = nil
         do {
             let prefs: Preference = try await apiClient.request("GET", path: "/groups/\(groupId)/preferences")
+            logger.info("loadPreferences: loaded \(prefs.genreLikes.count) likes")
             genreLikes = Set(prefs.genreLikes)
             genreDislikes = Set(prefs.genreDislikes)
             if let rating = prefs.maxContentRating,
@@ -37,20 +46,28 @@ class PreferencesViewModel: ObservableObject {
                 maxContentRating = parsed
             }
         } catch let apiError as APIError {
+            logger.error("loadPreferences: API error — \(String(describing: apiError))")
             error = errorMessage(from: apiError)
         } catch {
-            // Decode error from empty preferences — not an error
+            logger.error("loadPreferences: decode/other error — \(String(describing: error))")
         }
         isLoading = false
     }
 
     func savePreferences() async {
-        guard let apiClient, let groupId else { return }
-        guard canSave else { return }
+        guard let apiClient, let groupId else {
+            logger.warning("savePreferences: skipped — apiClient or groupId is nil")
+            return
+        }
+        guard canSave else {
+            logger.warning("savePreferences: skipped — canSave is false (likes: \(self.genreLikes.count))")
+            return
+        }
 
         // Remove overlaps from dislikes before saving
         let cleanDislikes = genreDislikes.subtracting(genreLikes)
 
+        logger.info("savePreferences: saving \(self.genreLikes.count) likes, \(cleanDislikes.count) dislikes, rating=\(self.maxContentRating.rawValue)")
         isSaving = true
         error = nil
         savedSuccessfully = false
@@ -61,11 +78,14 @@ class PreferencesViewModel: ObservableObject {
                 maxContentRating: maxContentRating.rawValue
             )
             let _: Preference = try await apiClient.request("PUT", path: "/groups/\(groupId)/preferences", body: request)
+            logger.info("savePreferences: success")
             genreDislikes = cleanDislikes
             savedSuccessfully = true
         } catch let apiError as APIError {
+            logger.error("savePreferences: API error — \(String(describing: apiError))")
             error = errorMessage(from: apiError)
         } catch {
+            logger.error("savePreferences: error — \(String(describing: error))")
             self.error = "An unexpected error occurred. Please try again."
         }
         isSaving = false

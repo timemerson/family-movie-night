@@ -5,63 +5,67 @@ struct PreferencesView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        Form {
-            Section {
-                Picker("Max Content Rating", selection: $viewModel.maxContentRating) {
-                    ForEach(ContentRating.allCases) { rating in
-                        Text(rating.displayName).tag(rating)
-                    }
-                }
-            } header: {
-                Text("Content Rating")
-            } footer: {
-                Text("Movies above this rating will be excluded from suggestions.")
-            }
-
-            Section {
-                ForEach(TMDBGenre.all) { genre in
-                    GenreRow(
-                        genre: genre,
-                        isLiked: viewModel.genreLikes.contains(genre.id),
-                        isDisliked: viewModel.genreDislikes.contains(genre.id),
-                        onToggleLike: { viewModel.toggleLike(genre.id) },
-                        onToggleDislike: { viewModel.toggleDislike(genre.id) }
-                    )
-                }
-            } header: {
-                Text("Genres (select at least 2 likes)")
-            } footer: {
-                Text("\(viewModel.genreLikes.count) liked, \(viewModel.genreDislikes.count) disliked")
-            }
-
-            if let error = viewModel.error {
+        VStack(spacing: 0) {
+            Form {
                 Section {
-                    Text(error)
-                        .foregroundStyle(.red)
+                    Picker("Max Content Rating", selection: $viewModel.maxContentRating) {
+                        ForEach(ContentRating.allCases) { rating in
+                            Text(rating.displayName).tag(rating)
+                        }
+                    }
+                } header: {
+                    Text("Content Rating")
+                } footer: {
+                    Text("Movies above this rating will be excluded from suggestions.")
+                }
+
+                Section {
+                    ForEach(TMDBGenre.all) { genre in
+                        GenreRow(
+                            genre: genre,
+                            isLiked: viewModel.genreLikes.contains(genre.id),
+                            isDisliked: viewModel.genreDislikes.contains(genre.id),
+                            onToggleLike: { viewModel.toggleLike(genre.id) },
+                            onToggleDislike: { viewModel.toggleDislike(genre.id) }
+                        )
+                    }
+                } header: {
+                    Text("Genres (select at least 2 likes)")
+                } footer: {
+                    Text("\(viewModel.genreLikes.count) liked, \(viewModel.genreDislikes.count) disliked")
+                }
+
+                if let error = viewModel.error {
+                    Section {
+                        Text(error)
+                            .foregroundStyle(.red)
+                    }
                 }
             }
 
-            Section {
-                Button {
-                    Task {
-                        await viewModel.savePreferences()
-                        if viewModel.savedSuccessfully {
-                            dismiss()
-                        }
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-                        if viewModel.isSaving {
-                            ProgressView()
-                        } else {
-                            Text("Save Preferences")
-                        }
-                        Spacer()
+            Divider()
+
+            Button {
+                Task {
+                    await viewModel.savePreferences()
+                    if viewModel.savedSuccessfully {
+                        dismiss()
                     }
                 }
-                .disabled(!viewModel.canSave || viewModel.isSaving)
+            } label: {
+                HStack {
+                    Spacer()
+                    if viewModel.isSaving {
+                        ProgressView()
+                    } else {
+                        Text("Save Preferences")
+                    }
+                    Spacer()
+                }
             }
+            .buttonStyle(.borderedProminent)
+            .disabled(!viewModel.canSave || viewModel.isSaving)
+            .padding()
         }
         .navigationTitle("My Preferences")
         .navigationBarTitleDisplayMode(.inline)

@@ -2,12 +2,7 @@ import SwiftUI
 
 struct EmailSignUpView: View {
     @EnvironmentObject var authService: AuthService
-    @StateObject private var viewModel: AuthViewModel
-
-    init() {
-        // AuthService will be injected via environment; using placeholder for init
-        _viewModel = StateObject(wrappedValue: AuthViewModel(authService: AuthService()))
-    }
+    @StateObject private var viewModel = AuthViewModel()
 
     var body: some View {
         Form {
@@ -39,7 +34,13 @@ struct EmailSignUpView: View {
             }
         }
         .navigationTitle("Sign Up")
-        .sheet(isPresented: .constant(viewModel.state == .verifyEmail)) {
+        .onAppear {
+            viewModel.configure(authService: authService)
+        }
+        .sheet(isPresented: Binding(
+            get: { viewModel.state == .verifyEmail },
+            set: { if !$0 { viewModel.state = .signUp } }
+        )) {
             VerifyEmailView(viewModel: viewModel)
         }
     }

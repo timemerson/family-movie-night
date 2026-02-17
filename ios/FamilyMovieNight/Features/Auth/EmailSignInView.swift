@@ -2,11 +2,7 @@ import SwiftUI
 
 struct EmailSignInView: View {
     @EnvironmentObject var authService: AuthService
-    @StateObject private var viewModel: AuthViewModel
-
-    init() {
-        _viewModel = StateObject(wrappedValue: AuthViewModel(authService: AuthService()))
-    }
+    @StateObject private var viewModel = AuthViewModel()
 
     var body: some View {
         Form {
@@ -35,5 +31,8 @@ struct EmailSignInView: View {
             }
         }
         .navigationTitle("Sign In")
+        .onAppear {
+            viewModel.configure(authService: authService)
+        }
     }
 }
