@@ -60,11 +60,15 @@ class AuthViewModel: ObservableObject {
 
     func signIn() async {
         guard canSignIn else { return }
+        guard let authService else {
+            logger.fault("signIn: authService not configured")
+            errorMessage = "Something went wrong. Please restart the app."
+            return
+        }
         isLoading = true
         errorMessage = nil
         do {
-            logger.info("signIn: starting for \(self.email)")
-            guard let authService else { return }
+            logger.info("signIn: starting")
             try await authService.signIn(email: email, password: password)
             logger.info("signIn: success")
         } catch {
@@ -76,11 +80,15 @@ class AuthViewModel: ObservableObject {
 
     func signUp() async {
         guard canSignUp else { return }
+        guard let authService else {
+            logger.fault("signUp: authService not configured")
+            errorMessage = "Something went wrong. Please restart the app."
+            return
+        }
         isLoading = true
         errorMessage = nil
         do {
-            guard let authService else { return }
-            logger.info("signUp: starting for \(self.email)")
+            logger.info("signUp: starting")
             try await authService.signUp(email: email, password: password)
             logger.info("signUp: success, moving to verify")
             state = .verifyEmail
@@ -93,11 +101,15 @@ class AuthViewModel: ObservableObject {
 
     func confirmSignUp() async {
         guard isVerificationCodeValid else { return }
+        guard let authService else {
+            logger.fault("confirmSignUp: authService not configured")
+            errorMessage = "Something went wrong. Please restart the app."
+            return
+        }
         isLoading = true
         errorMessage = nil
         do {
-            guard let authService else { return }
-            logger.info("confirmSignUp: confirming code for \(self.email)")
+            logger.info("confirmSignUp: confirming code")
             try await authService.confirmSignUp(email: email, code: verificationCode)
             logger.info("confirmSignUp: success, now signing in")
         } catch let error as AuthError {
@@ -117,7 +129,7 @@ class AuthViewModel: ObservableObject {
             return
         }
         do {
-            try await authService!.signIn(email: email, password: password)
+            try await authService.signIn(email: email, password: password)
             logger.info("confirmSignUp: sign-in success")
         } catch {
             logger.error("confirmSignUp: sign-in failed — \(String(describing: error))")
