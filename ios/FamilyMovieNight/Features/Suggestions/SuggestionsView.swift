@@ -4,7 +4,7 @@ struct SuggestionsView: View {
     @ObservedObject var viewModel: SuggestionsViewModel
 
     var body: some View {
-        Group {
+        SwiftUI.Group {
             if viewModel.isLoading && viewModel.suggestions.isEmpty {
                 VStack(spacing: 16) {
                     ProgressView()

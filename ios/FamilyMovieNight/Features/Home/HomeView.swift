@@ -9,7 +9,7 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            SwiftUI.Group {
                 if groupViewModel.isLoading {
                     ProgressView("Loading...")
                 } else if groupViewModel.group != nil {
