@@ -1,6 +1,8 @@
+import Combine
 import Foundation
 import Amplify
 import AWSCognitoAuthPlugin
+import AWSPluginsCore
 
 @MainActor
 class AuthService: ObservableObject {
