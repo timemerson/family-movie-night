@@ -1,5 +1,9 @@
+import Amplify
 import Combine
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "org.timemerson.FamilyMovieNight", category: "Auth")
 
 @MainActor
 class AuthViewModel: ObservableObject {
@@ -42,9 +46,15 @@ class AuthViewModel: ObservableObject {
         isEmailValid && isPasswordValid && isConfirmPasswordValid
     }
 
-    private let authService: AuthService
+    private var authService: AuthService?
+
+    nonisolated init() {}
 
     init(authService: AuthService) {
+        self.authService = authService
+    }
+
+    func configure(authService: AuthService) {
         self.authService = authService
     }
 
@@ -53,9 +63,13 @@ class AuthViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         do {
+            logger.info("signIn: starting for \(self.email)")
+            guard let authService else { return }
             try await authService.signIn(email: email, password: password)
+            logger.info("signIn: success")
         } catch {
-            errorMessage = error.localizedDescription
+            logger.error("signIn: failed — \(String(describing: error))")
+            errorMessage = Self.readableMessage(from: error)
         }
         isLoading = false
     }
@@ -65,10 +79,14 @@ class AuthViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         do {
+            guard let authService else { return }
+            logger.info("signUp: starting for \(self.email)")
             try await authService.signUp(email: email, password: password)
+            logger.info("signUp: success, moving to verify")
             state = .verifyEmail
         } catch {
-            errorMessage = error.localizedDescription
+            logger.error("signUp: failed — \(String(describing: error))")
+            errorMessage = Self.readableMessage(from: error)
         }
         isLoading = false
     }
@@ -78,11 +96,40 @@ class AuthViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         do {
+            guard let authService else { return }
+            logger.info("confirmSignUp: confirming code for \(self.email)")
             try await authService.confirmSignUp(email: email, code: verificationCode)
-            try await authService.signIn(email: email, password: password)
+            logger.info("confirmSignUp: success, now signing in")
+        } catch let error as AuthError {
+            // If already confirmed, that's fine — proceed to sign in
+            if error.errorDescription?.contains("CONFIRMED") == true {
+                logger.info("confirmSignUp: user already confirmed, proceeding to sign in")
+            } else {
+                logger.error("confirmSignUp: failed — \(String(describing: error))")
+                errorMessage = Self.readableMessage(from: error)
+                isLoading = false
+                return
+            }
         } catch {
-            errorMessage = error.localizedDescription
+            logger.error("confirmSignUp: failed — \(String(describing: error))")
+            errorMessage = Self.readableMessage(from: error)
+            isLoading = false
+            return
+        }
+        do {
+            try await authService!.signIn(email: email, password: password)
+            logger.info("confirmSignUp: sign-in success")
+        } catch {
+            logger.error("confirmSignUp: sign-in failed — \(String(describing: error))")
+            errorMessage = Self.readableMessage(from: error)
         }
         isLoading = false
+    }
+
+    private static func readableMessage(from error: Error) -> String {
+        if let authError = error as? AuthError {
+            return authError.errorDescription ?? error.localizedDescription
+        }
+        return error.localizedDescription
     }
 }
