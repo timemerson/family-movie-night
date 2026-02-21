@@ -3,6 +3,7 @@ import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { createHash } from "node:crypto";
 import type {
   TMDBMovie,
+  TMDBMovieDetail,
   TMDBDiscoverResponse,
   StreamingProvider,
 } from "../models/suggestion.js";
@@ -86,6 +87,69 @@ export class TMDBClient {
 
     await this.setCache(cacheKey, providers, 12);
     return providers;
+  }
+
+  async getMovieDetails(movieId: number): Promise<TMDBMovieDetail | null> {
+    const cacheKey = `detail:${movieId}`;
+    const cached = await this.getCache<TMDBMovieDetail>(cacheKey, 24);
+    if (cached) return cached;
+
+    const url = new URL(
+      `https://api.themoviedb.org/3/movie/${movieId}`,
+    );
+    url.searchParams.set("api_key", this.apiKey);
+    url.searchParams.set("append_to_response", "credits,videos,release_dates");
+
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      if (res.status === 404) return null;
+      throw new Error(`TMDB movie detail failed: ${res.status}`);
+    }
+
+    const data = await res.json() as any;
+    const year = data.release_date
+      ? parseInt(data.release_date.substring(0, 4), 10)
+      : 0;
+
+    // Extract US certification
+    const usRelease = data.release_dates?.results?.find(
+      (r: any) => r.iso_3166_1 === "US",
+    );
+    const contentRating = usRelease?.release_dates?.find(
+      (rd: any) => rd.certification,
+    )?.certification ?? null;
+
+    // Extract top 5 cast
+    const cast = (data.credits?.cast ?? []).slice(0, 5).map((c: any) => ({
+      name: c.name,
+      character: c.character,
+    }));
+
+    // Extract trailer URL
+    const trailer = (data.videos?.results ?? []).find(
+      (v: any) => v.type === "Trailer" && v.site === "YouTube",
+    );
+    const trailerUrl = trailer
+      ? `https://www.youtube.com/watch?v=${trailer.key}`
+      : null;
+
+    const detail: TMDBMovieDetail = {
+      tmdb_movie_id: data.id,
+      title: data.title,
+      year,
+      poster_path: data.poster_path,
+      overview: data.overview ?? "",
+      runtime: data.runtime ?? 0,
+      genres: (data.genres ?? []).map((g: any) => g.name),
+      content_rating: contentRating,
+      cast,
+      popularity: data.popularity ?? 0,
+      vote_average: data.vote_average ?? 0,
+      trailer_url: trailerUrl,
+    };
+
+    await this.setCache(cacheKey, detail, 24);
+    return detail;
   }
 
   async getContentRating(movieId: number): Promise<string | null> {
