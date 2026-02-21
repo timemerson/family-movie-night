@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SuggestionsView: View {
     @ObservedObject var viewModel: SuggestionsViewModel
+    @ObservedObject var watchlistViewModel: WatchlistViewModel
 
     var body: some View {
         SwiftUI.Group {
@@ -66,7 +67,14 @@ struct SuggestionsView: View {
 
             LazyVStack(spacing: 16) {
                 ForEach(viewModel.suggestions) { suggestion in
-                    SuggestionCard(suggestion: suggestion)
+                    SuggestionCard(
+                        suggestion: suggestion,
+                        onSaveForLater: {
+                            Task {
+                                _ = await watchlistViewModel.addToWatchlist(movie: suggestion)
+                            }
+                        }
+                    )
                 }
             }
             .padding()
@@ -97,6 +105,7 @@ struct SuggestionsView: View {
 
 struct SuggestionCard: View {
     let suggestion: MovieSuggestion
+    var onSaveForLater: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -175,6 +184,21 @@ struct SuggestionCard: View {
                 .font(.caption)
                 .foregroundStyle(.blue)
                 .italic()
+
+            // Save for Later
+            if let onSaveForLater {
+                Button {
+                    onSaveForLater()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bookmark")
+                        Text("Save for Later")
+                    }
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
         }
         .padding()
         .background(Color(.systemBackground))

@@ -4,6 +4,7 @@ struct GroupDetailView: View {
     @ObservedObject var viewModel: GroupViewModel
     @StateObject private var preferencesViewModel = PreferencesViewModel()
     @StateObject private var suggestionsViewModel = SuggestionsViewModel()
+    @StateObject private var watchlistViewModel = WatchlistViewModel()
     @State private var showShareSheet = false
     @State private var showLeaveConfirmation = false
 
@@ -32,9 +33,22 @@ struct GroupDetailView: View {
 
                 Section {
                     NavigationLink {
-                        SuggestionsView(viewModel: suggestionsViewModel)
+                        SuggestionsView(
+                            viewModel: suggestionsViewModel,
+                            watchlistViewModel: watchlistViewModel
+                        )
                     } label: {
                         Label("Suggest Movies", systemImage: "sparkles")
+                    }
+
+                    NavigationLink {
+                        WatchlistView(
+                            viewModel: watchlistViewModel,
+                            apiClient: viewModel.apiClient,
+                            groupId: group.groupId
+                        )
+                    } label: {
+                        Label("Watchlist", systemImage: "bookmark")
                     }
                 }
 
@@ -91,6 +105,7 @@ struct GroupDetailView: View {
                 if let apiClient = viewModel.apiClient {
                     preferencesViewModel.configure(apiClient: apiClient, groupId: group.groupId)
                     suggestionsViewModel.configure(apiClient: apiClient, groupId: group.groupId)
+                    watchlistViewModel.configure(apiClient: apiClient, groupId: group.groupId)
                 }
             }
         }
