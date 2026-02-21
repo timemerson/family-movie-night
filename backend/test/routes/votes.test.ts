@@ -87,7 +87,7 @@ describe("Votes routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.round_id).toBe("r-1");
       expect(body.tmdb_movie_id).toBe(550);
       expect(body.vote).toBe("up");
@@ -110,7 +110,7 @@ describe("Votes routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.vote).toBe("down");
     });
 
@@ -208,7 +208,7 @@ describe("Votes routes", () => {
       const res = await makeRequest("GET", "/rounds/r-1/results");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.round_id).toBe("r-1");
       expect(body.results).toHaveLength(1);
       expect(body.results[0].net_score).toBe(1);
@@ -254,7 +254,7 @@ describe("Votes routes", () => {
       const res = await makeRequest("GET", "/rounds/r-1/results");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.results[0].tied).toBe(true);
       expect(body.results[1].tied).toBe(true);
     });

@@ -170,7 +170,7 @@ describe("Rounds routes", () => {
       const res = await makeRequest("POST", "/groups/g-1/rounds");
 
       expect(res.status).toBe(201);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.round_id).toBeTruthy();
       expect(body.status).toBe("voting");
       expect(body.suggestions.length).toBeGreaterThan(0);
@@ -187,7 +187,7 @@ describe("Rounds routes", () => {
       const res = await makeRequest("POST", "/groups/g-1/rounds");
 
       expect(res.status).toBe(409);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.error).toContain("active round already exists");
       expect(body.active_round_id).toBe("r-existing");
     });
@@ -207,7 +207,7 @@ describe("Rounds routes", () => {
       const res = await makeRequest("POST", "/groups/g-1/rounds");
 
       expect(res.status).toBe(422);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.error).toContain("2 members");
     });
 
@@ -282,7 +282,7 @@ describe("Rounds routes", () => {
       const res = await makeRequest("GET", "/rounds/r-1");
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.round_id).toBe("r-1");
       expect(body.suggestions).toHaveLength(1);
       expect(body.suggestions[0].votes).toEqual({ up: 1, down: 0 });
@@ -354,7 +354,7 @@ describe("Rounds routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.status).toBe("closed");
     });
 
@@ -456,7 +456,7 @@ describe("Rounds routes", () => {
       });
 
       expect(res.status).toBe(201);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.tmdb_movie_id).toBe(550);
       expect(body.picked_by).toBe("user-123");
       expect(body.round_id).toBe("r-1");

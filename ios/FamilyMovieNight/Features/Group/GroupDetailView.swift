@@ -2,13 +2,13 @@ import SwiftUI
 
 struct GroupDetailView: View {
     @ObservedObject var viewModel: GroupViewModel
+    @Binding var navigationPath: NavigationPath
     @StateObject private var preferencesViewModel = PreferencesViewModel()
     @StateObject private var suggestionsViewModel = SuggestionsViewModel()
     @StateObject private var watchlistViewModel = WatchlistViewModel()
     @StateObject private var votingViewModel = VotingViewModel()
     @State private var showShareSheet = false
     @State private var showLeaveConfirmation = false
-    @State private var roundFlowPhase: RoundFlowPhase = .idle
 
     enum RoundFlowPhase: Hashable {
         case idle
@@ -124,15 +124,16 @@ struct GroupDetailView: View {
                         groupId: group.groupId,
                         isCreator: isCreator
                     ) { roundId in
-                        // Round created — navigate to voting
+                        navigationPath.append(RoundFlowPhase.voting(roundId))
                     }
                 case .voting(let roundId):
                     VotingView(
                         viewModel: votingViewModel,
+                        roundId: roundId,
                         currentUserId: viewModel.currentUserId ?? "",
                         isCreator: isCreator
                     ) {
-                        // Done voting — navigate to results
+                        navigationPath.append(RoundFlowPhase.results(roundId))
                     }
                 case .results(let roundId):
                     ResultsView(
@@ -141,6 +142,9 @@ struct GroupDetailView: View {
                     ) { tmdbMovieId in
                         Task {
                             await votingViewModel.pickMovie(tmdbMovieId: tmdbMovieId)
+                            if votingViewModel.pickResponse != nil {
+                                navigationPath.append(RoundFlowPhase.picked)
+                            }
                         }
                     }
                 case .picked:

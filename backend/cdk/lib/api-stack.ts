@@ -39,7 +39,7 @@ export class ApiStack extends cdk.Stack {
       functionName: `${id}-Handler`,
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: "index.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "../../dist/lambda")),
+      code: lambda.Code.fromAsset(path.join(__dirname, "../../lambda")),
       memorySize: 256,
       timeout: cdk.Duration.seconds(15),
       environment: {

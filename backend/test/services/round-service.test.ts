@@ -97,10 +97,12 @@ describe("RoundService", () => {
 
   describe("createRound", () => {
     it("creates round with algorithm suggestions", async () => {
-      // getActiveRound — GSI query — no active rounds
+      // getActiveRound pre-check — GSI query — no active rounds
       mockSend.mockResolvedValueOnce({ Items: [] });
-      // PutCommand for round
+      // Conditional PutCommand for round
       mockSend.mockResolvedValueOnce({});
+      // Post-write recheck getActiveRound — no other active round
+      mockSend.mockResolvedValueOnce({ Items: [] });
       // PutCommand for each suggestion (2)
       mockSend.mockResolvedValueOnce({});
       mockSend.mockResolvedValueOnce({});
@@ -115,6 +117,10 @@ describe("RoundService", () => {
       expect(result.suggestions[0].title).toBe("Fight Club");
       expect(result.relaxed_constraints).toEqual([]);
       expect(result.watchlist_eligible_count).toBe(0);
+
+      // Verify conditional put
+      const putCmd = mockSend.mock.calls[1][0];
+      expect(putCmd.input.ConditionExpression).toBe("attribute_not_exists(round_id)");
     });
 
     it("throws ConflictError when active round exists", async () => {
@@ -160,6 +166,8 @@ describe("RoundService", () => {
       ]);
       // PutCommand for round
       mockSend.mockResolvedValueOnce({});
+      // Post-write recheck getActiveRound — no other active round
+      mockSend.mockResolvedValueOnce({ Items: [] });
       // PutCommand for each suggestion (2 algo + 1 watchlist)
       mockSend.mockResolvedValueOnce({});
       mockSend.mockResolvedValueOnce({});
@@ -194,8 +202,12 @@ describe("RoundService", () => {
           added_at: `2026-01-0${i + 1}T00:00:00Z`,
         })),
       );
-      // PutCommand for round + 2 algo + 4 watchlist = 7
-      for (let i = 0; i < 7; i++) {
+      // PutCommand for round
+      mockSend.mockResolvedValueOnce({});
+      // Post-write recheck getActiveRound — no other active round
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // PutCommand for each suggestion (2 algo + 4 watchlist = 6)
+      for (let i = 0; i < 6; i++) {
         mockSend.mockResolvedValueOnce({});
       }
 
@@ -226,8 +238,11 @@ describe("RoundService", () => {
         },
       ]);
       mockWatchedService.getAllWatchedMovieIds.mockResolvedValueOnce(new Set([999]));
-      // PutCommand for round + 2 algo suggestions
+      // PutCommand for round
       mockSend.mockResolvedValueOnce({});
+      // Post-write recheck getActiveRound — no other active round
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // PutCommand for each suggestion (2 algo)
       mockSend.mockResolvedValueOnce({});
       mockSend.mockResolvedValueOnce({});
 
@@ -243,8 +258,11 @@ describe("RoundService", () => {
     it("uses only algorithm suggestions when include_watchlist is false", async () => {
       // getActiveRound — no active rounds
       mockSend.mockResolvedValueOnce({ Items: [] });
-      // PutCommand for round + 2 algo suggestions
+      // PutCommand for round
       mockSend.mockResolvedValueOnce({});
+      // Post-write recheck getActiveRound — no other active round
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // PutCommand for each suggestion (2 algo)
       mockSend.mockResolvedValueOnce({});
       mockSend.mockResolvedValueOnce({});
 
@@ -262,8 +280,11 @@ describe("RoundService", () => {
       mockSend.mockResolvedValueOnce({ Items: [] });
       // Empty watchlist
       mockWatchlistService.getWatchlist.mockResolvedValueOnce([]);
-      // PutCommand for round + 2 algo suggestions
+      // PutCommand for round
       mockSend.mockResolvedValueOnce({});
+      // Post-write recheck getActiveRound — no other active round
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // PutCommand for each suggestion (2 algo)
       mockSend.mockResolvedValueOnce({});
       mockSend.mockResolvedValueOnce({});
 
@@ -278,8 +299,11 @@ describe("RoundService", () => {
     it("passes exclude_movie_ids to suggestion service", async () => {
       // getActiveRound — no active rounds
       mockSend.mockResolvedValueOnce({ Items: [] });
-      // PutCommand for round + 2 suggestions
+      // PutCommand for round
       mockSend.mockResolvedValueOnce({});
+      // Post-write recheck getActiveRound — no other active round
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // PutCommand for each suggestion (2)
       mockSend.mockResolvedValueOnce({});
       mockSend.mockResolvedValueOnce({});
 
@@ -603,10 +627,11 @@ describe("RoundService", () => {
         poster_path: "/pB8...",
       });
 
-      // Verify round status updated to 'picked'
+      // Verify round status updated to 'picked' with atomic condition
       const updateCmd = mockSend.mock.calls[2][0];
       expect(updateCmd.input.ExpressionAttributeValues[":s"]).toBe("picked");
       expect(updateCmd.input.ExpressionAttributeValues[":pid"]).toBe("p-1");
+      expect(updateCmd.input.ConditionExpression).toBe("attribute_not_exists(pick_id)");
     });
 
     it("allows pick when round is closed", async () => {

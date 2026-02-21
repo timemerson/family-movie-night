@@ -6,14 +6,15 @@ struct HomeView: View {
 
     @State private var showCreateGroup = false
     @State private var showJoinGroup = false
+    @State private var navigationPath = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             SwiftUI.Group {
                 if groupViewModel.isLoading {
                     ProgressView("Loading...")
                 } else if groupViewModel.group != nil {
-                    GroupDetailView(viewModel: groupViewModel)
+                    GroupDetailView(viewModel: groupViewModel, navigationPath: $navigationPath)
                 } else {
                     noGroupView
                 }
