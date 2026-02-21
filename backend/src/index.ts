@@ -10,6 +10,7 @@ import { suggestions } from "./routes/suggestions.js";
 import { watchlist } from "./routes/watchlist.js";
 import { movies } from "./routes/movies.js";
 import { rounds } from "./routes/rounds.js";
+import { votes } from "./routes/votes.js";
 import { HttpError } from "./lib/errors.js";
 
 const app = new Hono<AppEnv>();
@@ -29,6 +30,7 @@ app.route("/", suggestions);
 app.route("/", watchlist);
 app.route("/", movies);
 app.route("/", rounds);
+app.route("/", votes);
 
 // Global error handler
 app.onError((err, c) => {
