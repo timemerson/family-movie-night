@@ -58,6 +58,23 @@ export const SuggestionsResponseSchema = z.object({
 
 export type SuggestionsResponse = z.infer<typeof SuggestionsResponseSchema>;
 
+// --- Full movie detail (from TMDB /movie/{id} with appended data) ---
+
+export interface TMDBMovieDetail {
+  tmdb_movie_id: number;
+  title: string;
+  year: number;
+  poster_path: string | null;
+  overview: string;
+  runtime: number;
+  genres: string[];
+  content_rating: string | null;
+  cast: { name: string; character: string }[];
+  popularity: number;
+  vote_average: number;
+  trailer_url: string | null;
+}
+
 // --- TMDB genre ID → name mapping ---
 
 export const TMDB_GENRE_MAP: Record<number, string> = {
