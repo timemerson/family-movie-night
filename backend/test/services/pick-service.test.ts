@@ -188,6 +188,75 @@ describe("PickService", () => {
     });
   });
 
+  describe("createPickForRound", () => {
+    it("creates pick when no existing pick for round", async () => {
+      // QueryCommand for round-pick-index — no existing picks
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // PutCommand — success
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await service.createPickForRound({
+        group_id: "g-1",
+        round_id: "r-1",
+        tmdb_movie_id: 550,
+        picked_by: "u-1",
+        title: "Fight Club",
+        poster_path: "/pB8...",
+      });
+
+      expect(result.pick_id).toBeTruthy();
+      expect(result.round_id).toBe("r-1");
+      expect(result.group_id).toBe("g-1");
+      expect(result.tmdb_movie_id).toBe(550);
+      expect(result.picked_by).toBe("u-1");
+      expect(result.watched).toBe(false);
+      expect(result.watched_at).toBeNull();
+
+      // Verify QueryCommand used round-pick-index
+      const queryCmd = mockSend.mock.calls[0][0];
+      expect(queryCmd.input.IndexName).toBe("round-pick-index");
+      expect(queryCmd.input.KeyConditionExpression).toBe("round_id = :rid");
+
+      // Verify PutCommand has ConditionExpression
+      const putCmd = mockSend.mock.calls[1][0];
+      expect(putCmd.input.ConditionExpression).toBe("attribute_not_exists(pick_id)");
+    });
+
+    it("throws ConflictError when pick already exists for round", async () => {
+      // QueryCommand for round-pick-index — existing pick found
+      mockSend.mockResolvedValueOnce({
+        Items: [{ pick_id: "p-existing", round_id: "r-1" }],
+      });
+
+      await expect(
+        service.createPickForRound({
+          group_id: "g-1",
+          round_id: "r-1",
+          tmdb_movie_id: 550,
+          picked_by: "u-1",
+          title: "Fight Club",
+          poster_path: "/pB8...",
+        }),
+      ).rejects.toThrow("A pick already exists for this round");
+    });
+
+    it("handles null poster_path", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await service.createPickForRound({
+        group_id: "g-1",
+        round_id: "r-1",
+        tmdb_movie_id: 550,
+        picked_by: "u-1",
+        title: "Fight Club",
+        poster_path: null,
+      });
+
+      expect(result.watched_at).toBeNull();
+    });
+  });
+
   describe("getWatchedMovieIds", () => {
     it("returns only tmdb_movie_ids where watched=true", async () => {
       mockSend.mockResolvedValueOnce({

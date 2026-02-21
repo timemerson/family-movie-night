@@ -524,6 +524,186 @@ describe("RoundService", () => {
     });
   });
 
+  describe("pickMovie", () => {
+    let serviceWithPick: RoundService;
+    let mockPickService: { createPickForRound: ReturnType<typeof vi.fn> };
+
+    beforeEach(() => {
+      const client = createMockDocClient();
+      mockSend = client.send;
+      mockGroupService = createMockGroupService();
+      mockSuggestionService = createMockSuggestionService();
+      mockWatchlistService = createMockWatchlistService();
+      mockWatchedService = createMockWatchedService();
+      mockPickService = {
+        createPickForRound: vi.fn().mockResolvedValue({
+          pick_id: "p-1",
+          round_id: "r-1",
+          group_id: "g-1",
+          tmdb_movie_id: 550,
+          picked_by: "user-1",
+          picked_at: "2026-02-21T21:00:00Z",
+          watched: false,
+          watched_at: null,
+        }),
+      };
+
+      serviceWithPick = new RoundService(
+        client as any,
+        "test-rounds",
+        "test-suggestions",
+        "test-votes",
+        "test-picks",
+        mockGroupService as any,
+        mockSuggestionService as any,
+        mockWatchlistService as any,
+        mockWatchedService as any,
+        mockPickService as any,
+      );
+    });
+
+    it("picks a movie and transitions round to picked", async () => {
+      // getRoundBasic
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      // requireMember returns creator
+      mockGroupService.requireMember.mockResolvedValueOnce({
+        user_id: "user-1",
+        role: "creator",
+      });
+      // GetCommand for suggestion
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          tmdb_movie_id: 550,
+          title: "Fight Club",
+          poster_path: "/pB8...",
+        },
+      });
+      // UpdateCommand for round status
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await serviceWithPick.pickMovie("r-1", 550, "user-1");
+
+      expect(result.pick_id).toBe("p-1");
+      expect(result.tmdb_movie_id).toBe(550);
+      expect(mockPickService.createPickForRound).toHaveBeenCalledWith({
+        group_id: "g-1",
+        round_id: "r-1",
+        tmdb_movie_id: 550,
+        picked_by: "user-1",
+        title: "Fight Club",
+        poster_path: "/pB8...",
+      });
+
+      // Verify round status updated to 'picked'
+      const updateCmd = mockSend.mock.calls[2][0];
+      expect(updateCmd.input.ExpressionAttributeValues[":s"]).toBe("picked");
+      expect(updateCmd.input.ExpressionAttributeValues[":pid"]).toBe("p-1");
+    });
+
+    it("allows pick when round is closed", async () => {
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "closed",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      mockGroupService.requireMember.mockResolvedValueOnce({
+        user_id: "user-1",
+        role: "creator",
+      });
+      mockSend.mockResolvedValueOnce({
+        Item: { round_id: "r-1", tmdb_movie_id: 550, title: "Fight Club", poster_path: null },
+      });
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await serviceWithPick.pickMovie("r-1", 550, "user-1");
+
+      expect(result.pick_id).toBe("p-1");
+    });
+
+    it("throws ForbiddenError for non-creator", async () => {
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      mockGroupService.requireMember.mockResolvedValueOnce({
+        user_id: "user-2",
+        role: "member",
+      });
+
+      await expect(
+        serviceWithPick.pickMovie("r-1", 550, "user-2"),
+      ).rejects.toThrow("Only the group creator can pick a movie");
+    });
+
+    it("throws ConflictError when round is already picked", async () => {
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "picked",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      mockGroupService.requireMember.mockResolvedValueOnce({
+        user_id: "user-1",
+        role: "creator",
+      });
+
+      await expect(
+        serviceWithPick.pickMovie("r-1", 550, "user-1"),
+      ).rejects.toThrow("Round is in 'picked' status, cannot pick");
+    });
+
+    it("throws ValidationError when movie not in round", async () => {
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      mockGroupService.requireMember.mockResolvedValueOnce({
+        user_id: "user-1",
+        role: "creator",
+      });
+      // Suggestion not found
+      mockSend.mockResolvedValueOnce({ Item: undefined });
+
+      await expect(
+        serviceWithPick.pickMovie("r-1", 999, "user-1"),
+      ).rejects.toThrow("Movie not in this round");
+    });
+
+    it("throws NotFoundError when round not found", async () => {
+      mockSend.mockResolvedValueOnce({ Item: undefined });
+
+      await expect(
+        serviceWithPick.pickMovie("r-missing", 550, "user-1"),
+      ).rejects.toThrow("Round not found");
+    });
+  });
+
   describe("persistSuggestions", () => {
     it("writes each suggestion to DynamoDB", async () => {
       mockSend.mockResolvedValue({});

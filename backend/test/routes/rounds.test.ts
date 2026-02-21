@@ -404,4 +404,165 @@ describe("Rounds routes", () => {
       expect(res.status).toBe(409);
     });
   });
+
+  describe("POST /rounds/:id/pick", () => {
+    it("returns 201 on successful pick", async () => {
+      // getRoundBasic (from route handler)
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          started_by: "user-123",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      // requireMember (from route handler)
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "creator" },
+      });
+      // getRoundBasic (from pickMovie)
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          started_by: "user-123",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      // requireMember (from pickMovie)
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "creator" },
+      });
+      // GetCommand for suggestion
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          tmdb_movie_id: 550,
+          title: "Fight Club",
+          poster_path: "/pB8...",
+        },
+      });
+      // QueryCommand for round-pick-index (createPickForRound)
+      mockSendFn.mockResolvedValueOnce({ Items: [] });
+      // PutCommand for pick (createPickForRound)
+      mockSendFn.mockResolvedValueOnce({});
+      // UpdateCommand for round status
+      mockSendFn.mockResolvedValueOnce({});
+
+      const res = await makeRequest("POST", "/rounds/r-1/pick", {
+        body: { tmdb_movie_id: 550 },
+      });
+
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.tmdb_movie_id).toBe(550);
+      expect(body.picked_by).toBe("user-123");
+      expect(body.round_id).toBe("r-1");
+      expect(body.group_id).toBe("g-1");
+      expect(body.watched).toBe(false);
+    });
+
+    it("returns 403 for non-creator", async () => {
+      // getRoundBasic (from route handler)
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      // requireMember (from route handler)
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // getRoundBasic (from pickMovie)
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      // requireMember (from pickMovie) — member
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+
+      const res = await makeRequest("POST", "/rounds/r-1/pick", {
+        body: { tmdb_movie_id: 550 },
+      });
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 409 when pick already exists for round", async () => {
+      // getRoundBasic (route)
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          started_by: "user-123",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      // requireMember (route)
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "creator" },
+      });
+      // getRoundBasic (pickMovie)
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          started_by: "user-123",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      // requireMember (pickMovie)
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "creator" },
+      });
+      // GetCommand for suggestion
+      mockSendFn.mockResolvedValueOnce({
+        Item: { round_id: "r-1", tmdb_movie_id: 550, title: "Fight Club", poster_path: null },
+      });
+      // QueryCommand for round-pick-index — already has a pick
+      mockSendFn.mockResolvedValueOnce({
+        Items: [{ pick_id: "p-existing", round_id: "r-1" }],
+      });
+
+      const res = await makeRequest("POST", "/rounds/r-1/pick", {
+        body: { tmdb_movie_id: 550 },
+      });
+
+      expect(res.status).toBe(409);
+    });
+
+    it("returns 400 for missing tmdb_movie_id", async () => {
+      const res = await makeRequest("POST", "/rounds/r-1/pick", {
+        body: {},
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 404 when round not found", async () => {
+      // getRoundBasic — not found
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+
+      const res = await makeRequest("POST", "/rounds/r-1/pick", {
+        body: { tmdb_movie_id: 550 },
+      });
+
+      expect(res.status).toBe(400);
+    });
+  });
 });

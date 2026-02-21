@@ -7,7 +7,7 @@ import {
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { randomUUID } from "node:crypto";
 import type { Pick } from "../models/pick.js";
-import { NotFoundError, ForbiddenError } from "../lib/errors.js";
+import { NotFoundError, ForbiddenError, ConflictError } from "../lib/errors.js";
 
 export class PickService {
   constructor(
@@ -100,6 +100,55 @@ export class PickService {
     );
 
     return (result.Items ?? []) as Pick[];
+  }
+
+  /**
+   * Create a pick with conditional write: checks round-pick-index to prevent
+   * duplicate picks for the same round.
+   */
+  async createPickForRound(input: {
+    group_id: string;
+    round_id: string;
+    tmdb_movie_id: number;
+    picked_by: string;
+    title: string;
+    poster_path: string | null;
+  }): Promise<Pick> {
+    // Check if a pick already exists for this round
+    const existingResult = await this.docClient.send(
+      new QueryCommand({
+        TableName: this.picksTable,
+        IndexName: "round-pick-index",
+        KeyConditionExpression: "round_id = :rid",
+        ExpressionAttributeValues: { ":rid": input.round_id },
+      }),
+    );
+
+    if (existingResult.Items && existingResult.Items.length > 0) {
+      throw new ConflictError("A pick already exists for this round");
+    }
+
+    const now = new Date().toISOString();
+    const pick: Pick = {
+      pick_id: randomUUID(),
+      round_id: input.round_id,
+      group_id: input.group_id,
+      tmdb_movie_id: input.tmdb_movie_id,
+      picked_by: input.picked_by,
+      picked_at: now,
+      watched: false,
+      watched_at: null,
+    };
+
+    await this.docClient.send(
+      new PutCommand({
+        TableName: this.picksTable,
+        Item: pick,
+        ConditionExpression: "attribute_not_exists(pick_id)",
+      }),
+    );
+
+    return pick;
   }
 
   async getWatchedMovieIds(groupId: string): Promise<number[]> {

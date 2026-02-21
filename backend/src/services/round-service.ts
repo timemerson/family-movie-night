@@ -13,7 +13,9 @@ import type {
   SuggestionWithVotes,
 } from "../models/round.js";
 import type { Suggestion } from "../models/suggestion.js";
+import type { Pick } from "../models/pick.js";
 import type { GroupService } from "./group-service.js";
+import type { PickService } from "./pick-service.js";
 import type { SuggestionService, SuggestionsResult } from "./suggestion-service.js";
 import type { WatchlistService } from "./watchlist-service.js";
 import type { WatchedService } from "./watched-service.js";
@@ -37,6 +39,7 @@ export class RoundService {
     private readonly suggestionService: SuggestionService,
     private readonly watchlistService: WatchlistService,
     private readonly watchedService: WatchedService,
+    private readonly pickService?: PickService,
   ) {}
 
   async createRound(
@@ -345,6 +348,70 @@ export class RoundService {
       items.push(item);
     }
     return items;
+  }
+
+  async pickMovie(
+    roundId: string,
+    tmdbMovieId: number,
+    userId: string,
+  ): Promise<Pick> {
+    const round = await this.getRoundBasic(roundId);
+    if (!round) {
+      throw new NotFoundError("Round not found");
+    }
+
+    // Only creator can pick
+    const member = await this.groupService.requireMember(round.group_id, userId);
+    if ((member as any).role !== "creator") {
+      throw new ForbiddenError("Only the group creator can pick a movie");
+    }
+
+    // Round must be voting or closed
+    if (round.status !== "voting" && round.status !== "closed") {
+      throw new ConflictError(
+        `Round is in '${round.status}' status, cannot pick`,
+      );
+    }
+
+    // Verify movie is in round's suggestions
+    const suggestionResult = await this.docClient.send(
+      new GetCommand({
+        TableName: this.suggestionsTable,
+        Key: { round_id: roundId, tmdb_movie_id: tmdbMovieId },
+      }),
+    );
+    if (!suggestionResult.Item) {
+      throw new ValidationError("Movie not in this round");
+    }
+
+    const suggestion = suggestionResult.Item as RoundSuggestion;
+
+    if (!this.pickService) {
+      throw new Error("PickService is required for pickMovie");
+    }
+
+    // Create pick with conditional write (prevents duplicates)
+    const pick = await this.pickService.createPickForRound({
+      group_id: round.group_id,
+      round_id: roundId,
+      tmdb_movie_id: tmdbMovieId,
+      picked_by: userId,
+      title: suggestion.title,
+      poster_path: suggestion.poster_path,
+    });
+
+    // Transition round status to 'picked'
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.roundsTable,
+        Key: { round_id: roundId },
+        UpdateExpression: "SET #s = :s, pick_id = :pid",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: { ":s": "picked", ":pid": pick.pick_id },
+      }),
+    );
+
+    return pick;
   }
 
   /** Get round without joins (for internal checks) */

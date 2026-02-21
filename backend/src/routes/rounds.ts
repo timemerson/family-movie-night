@@ -8,7 +8,7 @@ import { WatchedService } from "../services/watched-service.js";
 import { SuggestionService } from "../services/suggestion-service.js";
 import { RoundService } from "../services/round-service.js";
 import { TMDBClient } from "../services/tmdb-client.js";
-import { CreateRoundSchema, CloseRoundSchema } from "../models/round.js";
+import { CreateRoundSchema, CloseRoundSchema, PickMovieSchema } from "../models/round.js";
 import { getDocClient, tableName } from "../lib/dynamo.js";
 import { ValidationError } from "../lib/errors.js";
 
@@ -65,6 +65,7 @@ function getServices(streamingServices: string[]) {
     suggestionService,
     watchlistService,
     watchedService,
+    pickService,
   );
   return { groupService, roundService };
 }
@@ -161,6 +162,39 @@ rounds.patch("/rounds/:round_id", async (c) => {
 
   const updated = await roundService.closeRound(roundId, userId);
   return c.json(updated);
+});
+
+// POST /rounds/:round_id/pick — lock in a movie pick (creator only)
+rounds.post("/rounds/:round_id/pick", async (c) => {
+  const userId = c.get("userId");
+  const roundId = c.req.param("round_id");
+
+  const raw = await c.req.json();
+  const parsed = PickMovieSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ValidationError("Invalid request: tmdb_movie_id is required");
+  }
+
+  const { groupService, roundService } = getServices([]);
+
+  // Get round to find group_id for membership check
+  const round = await roundService.getRoundBasic(roundId);
+  if (!round) {
+    throw new ValidationError("Round not found");
+  }
+  await groupService.requireMember(round.group_id, userId);
+
+  const pick = await roundService.pickMovie(roundId, parsed.data.tmdb_movie_id, userId);
+
+  return c.json({
+    pick_id: pick.pick_id,
+    round_id: pick.round_id,
+    group_id: pick.group_id,
+    tmdb_movie_id: pick.tmdb_movie_id,
+    picked_by: pick.picked_by,
+    picked_at: pick.picked_at,
+    watched: pick.watched,
+  }, 201);
 });
 
 export { rounds };

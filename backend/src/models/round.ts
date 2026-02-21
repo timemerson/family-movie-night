@@ -30,6 +30,12 @@ export const CloseRoundSchema = z.object({
   status: z.literal("closed"),
 });
 
+// --- Pick Movie Request ---
+
+export const PickMovieSchema = z.object({
+  tmdb_movie_id: z.number({ required_error: "tmdb_movie_id is required" }),
+});
+
 // --- Round Suggestion (persisted to DynamoDB) ---
 
 export const RoundSuggestionSchema = SuggestionSchema.extend({
