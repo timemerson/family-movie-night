@@ -14,6 +14,8 @@ export class DataStack extends cdk.Stack {
   public readonly picksTable: dynamodb.Table;
   public readonly ratingsTable: dynamodb.Table;
   public readonly tmdbCacheTable: dynamodb.Table;
+  public readonly watchlistTable: dynamodb.Table;
+  public readonly watchedMoviesTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -166,6 +168,26 @@ export class DataStack extends cdk.Stack {
       tableName: `${id}-Ratings`,
       partitionKey: { name: "pick_id", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "user_id", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy,
+      pointInTimeRecovery: pitr,
+    });
+
+    // Watchlist: PK=group_id, SK=tmdb_movie_id (Number)
+    this.watchlistTable = new dynamodb.Table(this, "Watchlist", {
+      tableName: `${id}-Watchlist`,
+      partitionKey: { name: "group_id", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "tmdb_movie_id", type: dynamodb.AttributeType.NUMBER },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy,
+      pointInTimeRecovery: pitr,
+    });
+
+    // WatchedMovies: PK=group_id, SK=tmdb_movie_id (Number)
+    this.watchedMoviesTable = new dynamodb.Table(this, "WatchedMovies", {
+      tableName: `${id}-WatchedMovies`,
+      partitionKey: { name: "group_id", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "tmdb_movie_id", type: dynamodb.AttributeType.NUMBER },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy,
       pointInTimeRecovery: pitr,

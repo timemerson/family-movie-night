@@ -54,6 +54,8 @@ export class ApiStack extends cdk.Stack {
         PICKS_TABLE: dataStack.picksTable.tableName,
         RATINGS_TABLE: dataStack.ratingsTable.tableName,
         TMDB_CACHE_TABLE: dataStack.tmdbCacheTable.tableName,
+        WATCHLIST_TABLE: dataStack.watchlistTable.tableName,
+        WATCHED_MOVIES_TABLE: dataStack.watchedMoviesTable.tableName,
         TMDB_API_KEY: tmdbApiKeyParam.stringValue,
       },
     });
@@ -66,6 +68,11 @@ export class ApiStack extends cdk.Stack {
     dataStack.preferencesTable.grantReadWriteData(this.handler);
     dataStack.picksTable.grantReadWriteData(this.handler);
     dataStack.tmdbCacheTable.grantReadWriteData(this.handler);
+    dataStack.watchlistTable.grantReadWriteData(this.handler);
+    dataStack.watchedMoviesTable.grantReadWriteData(this.handler);
+    dataStack.roundsTable.grantReadData(this.handler);
+    dataStack.suggestionsTable.grantReadData(this.handler);
+    dataStack.votesTable.grantReadData(this.handler);
 
     // JWT Authorizer using Cognito
     const issuerUrl = `https://cognito-idp.${this.region}.amazonaws.com/${authStack.userPool.userPoolId}`;

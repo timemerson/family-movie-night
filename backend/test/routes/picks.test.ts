@@ -142,28 +142,200 @@ describe("Pick routes", () => {
     });
   });
 
-  describe("GET /groups/:group_id/watched", () => {
-    it("returns 200 with movie_ids array", async () => {
-      // requireMember — membership exists
+  describe("POST /groups/:group_id/watched", () => {
+    it("returns 201 on success", async () => {
+      // requireMember
       mockSendFn.mockResolvedValueOnce({
         Item: { group_id: "g-1", user_id: "user-123", role: "member" },
       });
-      // getWatchedMovieIds → getGroupPicks: QueryCommand
+      // markDirectlyWatched: check direct watched — not found
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+      // markDirectlyWatched: check pick watched — no picks
+      mockSendFn.mockResolvedValueOnce({ Items: [] });
+      // markDirectlyWatched: PutCommand
+      mockSendFn.mockResolvedValueOnce({});
+      // removeFromWatchlistIfPresent: isOnWatchlist — not found
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+
+      const res = await makeRequest("POST", "/groups/g-1/watched", {
+        body: {
+          tmdb_movie_id: 550,
+          title: "Fight Club",
+          poster_path: "/pB8...",
+          year: 1999,
+        },
+      });
+
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as any;
+      expect(body.tmdb_movie_id).toBe(550);
+      expect(body.source).toBe("direct");
+      expect(body.marked_by).toBe("user-123");
+    });
+
+    it("returns 409 when already watched", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // markDirectlyWatched: check direct watched — found
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", tmdb_movie_id: 550 },
+      });
+
+      const res = await makeRequest("POST", "/groups/g-1/watched", {
+        body: {
+          tmdb_movie_id: 550,
+          title: "Fight Club",
+          poster_path: "/pB8...",
+          year: 1999,
+        },
+      });
+
+      expect(res.status).toBe(409);
+    });
+
+    it("returns 403 for non-member", async () => {
+      // requireMember — not found
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+
+      const res = await makeRequest("POST", "/groups/g-1/watched", {
+        body: {
+          tmdb_movie_id: 550,
+          title: "Fight Club",
+          poster_path: "/pB8...",
+          year: 1999,
+        },
+      });
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe("DELETE /groups/:group_id/watched/:tmdb_movie_id", () => {
+    it("returns 204 within 24h", async () => {
+      const recentTime = new Date(Date.now() - 1000 * 60 * 60).toISOString();
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // GetCommand — directly watched item
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          group_id: "g-1",
+          tmdb_movie_id: 550,
+          marked_by: "user-123",
+          watched_at: recentTime,
+          source: "direct",
+        },
+      });
+      // DeleteCommand
+      mockSendFn.mockResolvedValueOnce({});
+
+      const res = await makeRequest("DELETE", "/groups/g-1/watched/550");
+
+      expect(res.status).toBe(204);
+    });
+
+    it("returns 400 when undo window expired", async () => {
+      const oldTime = new Date(
+        Date.now() - 25 * 60 * 60 * 1000,
+      ).toISOString();
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // GetCommand — directly watched item (old)
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          group_id: "g-1",
+          tmdb_movie_id: 550,
+          marked_by: "user-123",
+          watched_at: oldTime,
+          source: "direct",
+        },
+      });
+
+      const res = await makeRequest("DELETE", "/groups/g-1/watched/550");
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as any;
+      expect(body.error).toBe("Undo window expired");
+    });
+
+    it("returns 403 for wrong user", async () => {
+      const recentTime = new Date(Date.now() - 1000 * 60 * 60).toISOString();
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // GetCommand — directly watched by someone else
+      mockSendFn.mockResolvedValueOnce({
+        Item: {
+          group_id: "g-1",
+          tmdb_movie_id: 550,
+          marked_by: "user-other",
+          watched_at: recentTime,
+          source: "direct",
+        },
+      });
+
+      const res = await makeRequest("DELETE", "/groups/g-1/watched/550");
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 400 for picked movie", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // GetCommand — not in WatchedMovies
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+      // QueryCommand — found in picks
+      mockSendFn.mockResolvedValueOnce({
+        Items: [{ tmdb_movie_id: 550, watched: true }],
+      });
+
+      const res = await makeRequest("DELETE", "/groups/g-1/watched/550");
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("GET /groups/:group_id/watched", () => {
+    it("returns 200 with combined watched list", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // getDirectlyWatchedMovies — QueryCommand
+      mockSendFn.mockResolvedValueOnce({
+        Items: [
+          {
+            group_id: "g-1",
+            tmdb_movie_id: 550,
+            marked_by: "user-123",
+            watched_at: "2026-02-16T00:00:00Z",
+            title: "Fight Club",
+            poster_path: "/pB8...",
+            year: 1999,
+            source: "direct",
+          },
+        ],
+      });
+      // Pick-watched — QueryCommand
       mockSendFn.mockResolvedValueOnce({
         Items: [
           {
             pick_id: "p-1",
             group_id: "g-1",
-            tmdb_movie_id: 550,
-            watched: true,
-            watched_at: "2026-02-15T00:00:00Z",
-          },
-          {
-            pick_id: "p-2",
-            group_id: "g-1",
             tmdb_movie_id: 680,
-            watched: false,
-            watched_at: null,
+            picked_by: "user-456",
+            watched: true,
+            watched_at: "2026-02-14T00:00:00Z",
+            title: "Pulp Fiction",
+            poster_path: "/d5i...",
           },
         ],
       });
@@ -171,8 +343,27 @@ describe("Pick routes", () => {
       const res = await makeRequest("GET", "/groups/g-1/watched");
 
       expect(res.status).toBe(200);
-      const body = await res.json() as any;
-      expect(body.movie_ids).toEqual([550]);
+      const body = (await res.json()) as any;
+      expect(body.watched_movies).toHaveLength(2);
+      expect(body.watched_movies[0].source).toBe("direct");
+      expect(body.watched_movies[1].source).toBe("picked");
+    });
+
+    it("returns 200 with empty list", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // getDirectlyWatchedMovies — empty
+      mockSendFn.mockResolvedValueOnce({ Items: undefined });
+      // Pick-watched — empty
+      mockSendFn.mockResolvedValueOnce({ Items: undefined });
+
+      const res = await makeRequest("GET", "/groups/g-1/watched");
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as any;
+      expect(body.watched_movies).toEqual([]);
     });
 
     it("returns 403 for non-member", async () => {

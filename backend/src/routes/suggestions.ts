@@ -3,6 +3,8 @@ import type { AppEnv } from "../middleware/auth.js";
 import { GroupService } from "../services/group-service.js";
 import { PreferenceService } from "../services/preference-service.js";
 import { PickService } from "../services/pick-service.js";
+import { WatchlistService } from "../services/watchlist-service.js";
+import { WatchedService } from "../services/watched-service.js";
 import { SuggestionService } from "../services/suggestion-service.js";
 import { TMDBClient } from "../services/tmdb-client.js";
 import { getDocClient, tableName } from "../lib/dynamo.js";
@@ -34,11 +36,24 @@ function getSuggestionService(streamingServices: string[]) {
     docClient,
     tableName("TMDB_CACHE"),
   );
+  const watchlistService = new WatchlistService(
+    docClient,
+    tableName("WATCHLIST"),
+    tableName("PICKS"),
+    tableName("WATCHED_MOVIES"),
+  );
+  const watchedService = new WatchedService(
+    docClient,
+    tableName("WATCHED_MOVIES"),
+    tableName("PICKS"),
+    watchlistService,
+  );
   return new SuggestionService(
     preferenceService,
     pickService,
     tmdbClient,
     streamingServices,
+    watchedService,
   );
 }
 

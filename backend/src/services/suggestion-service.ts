@@ -1,5 +1,6 @@
 import type { PreferenceService, PreferenceSummary } from "./preference-service.js";
 import type { PickService } from "./pick-service.js";
+import type { WatchedService } from "./watched-service.js";
 import type { TMDBClient } from "./tmdb-client.js";
 import type { TMDBMovie, Suggestion, StreamingProvider } from "../models/suggestion.js";
 import { TMDB_GENRE_MAP, RATING_ORDER } from "../models/suggestion.js";
@@ -19,6 +20,7 @@ export class SuggestionService {
     private readonly pickService: PickService,
     private readonly tmdbClient: TMDBClient,
     private readonly streamingServices: string[],
+    private readonly watchedService?: WatchedService,
   ) {}
 
   async getSuggestions(
@@ -34,8 +36,14 @@ export class SuggestionService {
       );
     }
 
-    // Stage 3 (early): Get watched movie IDs for exclusion
-    const watchedIds = await this.pickService.getWatchedMovieIds(groupId);
+    // Stage 3 (early): Get watched movie IDs for exclusion (combined: picks + direct)
+    let watchedIds: number[];
+    if (this.watchedService) {
+      const watchedSet = await this.watchedService.getAllWatchedMovieIds(groupId);
+      watchedIds = [...watchedSet];
+    } else {
+      watchedIds = await this.pickService.getWatchedMovieIds(groupId);
+    }
     const excludeSet = new Set([...watchedIds, ...excludeMovieIds]);
 
     // Stage 2+3+4: Query TMDB, filter, score — with progressive relaxation
