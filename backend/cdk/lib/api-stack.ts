@@ -70,9 +70,9 @@ export class ApiStack extends cdk.Stack {
     dataStack.tmdbCacheTable.grantReadWriteData(this.handler);
     dataStack.watchlistTable.grantReadWriteData(this.handler);
     dataStack.watchedMoviesTable.grantReadWriteData(this.handler);
-    dataStack.roundsTable.grantReadData(this.handler);
-    dataStack.suggestionsTable.grantReadData(this.handler);
-    dataStack.votesTable.grantReadData(this.handler);
+    dataStack.roundsTable.grantReadWriteData(this.handler);
+    dataStack.suggestionsTable.grantReadWriteData(this.handler);
+    dataStack.votesTable.grantReadWriteData(this.handler);
 
     // JWT Authorizer using Cognito
     const issuerUrl = `https://cognito-idp.${this.region}.amazonaws.com/${authStack.userPool.userPoolId}`;
