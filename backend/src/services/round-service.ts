@@ -1,4 +1,5 @@
 import {
+  DeleteCommand,
   GetCommand,
   PutCommand,
   QueryCommand,
@@ -122,8 +123,25 @@ export class RoundService {
       new PutCommand({
         TableName: this.roundsTable,
         Item: round,
+        ConditionExpression: "attribute_not_exists(round_id)",
       }),
     );
+
+    // Post-write consistency check: re-query for active rounds.
+    // If two concurrent creates both passed the pre-check, one must yield.
+    const recheck = await this.getActiveRound(groupId);
+    if (recheck && recheck.round_id !== round.round_id) {
+      // Another round was created concurrently — delete ours
+      await this.docClient.send(
+        new DeleteCommand({
+          TableName: this.roundsTable,
+          Key: { round_id: round.round_id },
+        }),
+      );
+      const err = new ConflictError("An active round already exists for this group");
+      (err as any).active_round_id = recheck.round_id;
+      throw err;
+    }
 
     // Persist suggestions
     const allSuggestions = [
@@ -400,16 +418,25 @@ export class RoundService {
       poster_path: suggestion.poster_path,
     });
 
-    // Transition round status to 'picked'
-    await this.docClient.send(
-      new UpdateCommand({
-        TableName: this.roundsTable,
-        Key: { round_id: roundId },
-        UpdateExpression: "SET #s = :s, pick_id = :pid",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: { ":s": "picked", ":pid": pick.pick_id },
-      }),
-    );
+    // Atomically transition round to 'picked' — attribute_not_exists(pick_id)
+    // prevents a second pick even if two requests race past the query pre-check
+    try {
+      await this.docClient.send(
+        new UpdateCommand({
+          TableName: this.roundsTable,
+          Key: { round_id: roundId },
+          UpdateExpression: "SET #s = :s, pick_id = :pid",
+          ConditionExpression: "attribute_not_exists(pick_id)",
+          ExpressionAttributeNames: { "#s": "status" },
+          ExpressionAttributeValues: { ":s": "picked", ":pid": pick.pick_id },
+        }),
+      );
+    } catch (err: any) {
+      if (err.name === "ConditionalCheckFailedException") {
+        throw new ConflictError("A pick already exists for this round");
+      }
+      throw err;
+    }
 
     return pick;
   }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct VotingView: View {
     @ObservedObject var viewModel: VotingViewModel
+    let roundId: String
     let currentUserId: String
     let isCreator: Bool
     var onDoneVoting: (() -> Void)?
@@ -67,6 +68,9 @@ struct VotingView: View {
         }
         .navigationTitle("Vote")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await viewModel.loadRound(roundId: roundId)
+        }
     }
 }
 
