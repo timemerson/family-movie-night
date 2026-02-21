@@ -5,8 +5,18 @@ struct GroupDetailView: View {
     @StateObject private var preferencesViewModel = PreferencesViewModel()
     @StateObject private var suggestionsViewModel = SuggestionsViewModel()
     @StateObject private var watchlistViewModel = WatchlistViewModel()
+    @StateObject private var votingViewModel = VotingViewModel()
     @State private var showShareSheet = false
     @State private var showLeaveConfirmation = false
+    @State private var roundFlowPhase: RoundFlowPhase = .idle
+
+    enum RoundFlowPhase: Hashable {
+        case idle
+        case start
+        case voting(String)
+        case results(String)
+        case picked
+    }
 
     private var isCreator: Bool {
         guard let userId = viewModel.currentUserId,
@@ -32,6 +42,11 @@ struct GroupDetailView: View {
                 }
 
                 Section {
+                    NavigationLink(value: RoundFlowPhase.start) {
+                        Label("Pick Tonight's Movie", systemImage: "film.stack")
+                    }
+                    .bold()
+
                     NavigationLink {
                         SuggestionsView(
                             viewModel: suggestionsViewModel,
@@ -101,11 +116,51 @@ struct GroupDetailView: View {
             } message: {
                 Text("You'll need a new invite to rejoin.")
             }
+            .navigationDestination(for: RoundFlowPhase.self) { phase in
+                switch phase {
+                case .start:
+                    StartRoundView(
+                        viewModel: votingViewModel,
+                        groupId: group.groupId,
+                        isCreator: isCreator
+                    ) { roundId in
+                        // Round created — navigate to voting
+                    }
+                case .voting(let roundId):
+                    VotingView(
+                        viewModel: votingViewModel,
+                        currentUserId: viewModel.currentUserId ?? "",
+                        isCreator: isCreator
+                    ) {
+                        // Done voting — navigate to results
+                    }
+                case .results(let roundId):
+                    ResultsView(
+                        viewModel: votingViewModel,
+                        isCreator: isCreator
+                    ) { tmdbMovieId in
+                        Task {
+                            await votingViewModel.pickMovie(tmdbMovieId: tmdbMovieId)
+                        }
+                    }
+                case .picked:
+                    if let pick = votingViewModel.pick {
+                        PickConfirmationView(
+                            pick: pick,
+                            groupId: group.groupId,
+                            apiClient: viewModel.apiClient
+                        )
+                    }
+                case .idle:
+                    EmptyView()
+                }
+            }
             .onAppear {
                 if let apiClient = viewModel.apiClient {
                     preferencesViewModel.configure(apiClient: apiClient, groupId: group.groupId)
                     suggestionsViewModel.configure(apiClient: apiClient, groupId: group.groupId)
                     watchlistViewModel.configure(apiClient: apiClient, groupId: group.groupId)
+                    votingViewModel.configure(apiClient: apiClient, groupId: group.groupId)
                 }
             }
         }
