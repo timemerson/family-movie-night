@@ -113,9 +113,19 @@ cd backend/cdk && npx cdk deploy '*-Auth'
 - `genre_likes` and `genre_dislikes` must not overlap
 - `max_content_rating` must be one of: `G`, `PG`, `PG-13`, `R`
 
-### Picks (Task 04-B)
+### Watchlist (Slice A)
+- `POST /groups/{group_id}/watchlist` — add a movie to the watchlist (members only, 50-movie cap)
+- `GET /groups/{group_id}/watchlist` — list watchlist items reverse-chronologically (members only)
+- `DELETE /groups/{group_id}/watchlist/{tmdb_movie_id}` — remove from watchlist (adder or creator only)
+
+### Watched Movies (Slice A)
 - `POST /groups/{group_id}/picks/{pick_id}/watched` — mark a pick as watched (members only)
-- `GET /groups/{group_id}/watched` — get watched movie IDs for a group (members only)
+- `POST /groups/{group_id}/watched` — directly mark a movie as watched (members only)
+- `DELETE /groups/{group_id}/watched/{tmdb_movie_id}` — undo direct watched mark (within 24h, marker or creator only)
+- `GET /groups/{group_id}/watched` — get combined watched movies (picks + direct marks, members only)
+
+### Movie Detail (Slice A)
+- `GET /movies/{tmdb_movie_id}?group_id={group_id}` — get movie metadata from TMDB with optional group context overlay (watchlist status, watched status, vote history, active round)
 
 ### Suggestions (Task 05)
 - `GET /groups/{group_id}/suggestions` — get 3–5 movie suggestions for the group (members only)
@@ -209,6 +219,64 @@ The CDK stack reads this parameter at deploy time and injects it into the Lambda
    curl -H "Authorization: Bearer <other-user-token>" \
      https://<api-endpoint>/groups/<group_id>/suggestions
    # Expected: 403
+   ```
+
+### Testing Watchlist Locally
+
+1. **Add to watchlist:**
+   ```bash
+   curl -X POST -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{"tmdb_movie_id": 550, "title": "Fight Club", "poster_path": "/pB8BM7pdSp6B6Ih7QI4S2t0POtL.jpg", "year": 1999, "genres": ["Drama"], "content_rating": "R"}' \
+     https://<api-endpoint>/groups/<group_id>/watchlist
+   ```
+
+2. **List watchlist:**
+   ```bash
+   curl -H "Authorization: Bearer <token>" \
+     https://<api-endpoint>/groups/<group_id>/watchlist
+   ```
+
+3. **Remove from watchlist:**
+   ```bash
+   curl -X DELETE -H "Authorization: Bearer <token>" \
+     https://<api-endpoint>/groups/<group_id>/watchlist/550
+   ```
+
+### Testing Watched Movies Locally
+
+1. **Mark as watched (direct):**
+   ```bash
+   curl -X POST -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{"tmdb_movie_id": 550, "title": "Fight Club", "poster_path": "/pB8BM7pdSp6B6Ih7QI4S2t0POtL.jpg", "year": 1999}' \
+     https://<api-endpoint>/groups/<group_id>/watched
+   ```
+
+2. **Get combined watched list:**
+   ```bash
+   curl -H "Authorization: Bearer <token>" \
+     https://<api-endpoint>/groups/<group_id>/watched
+   ```
+
+3. **Undo watched (within 24h):**
+   ```bash
+   curl -X DELETE -H "Authorization: Bearer <token>" \
+     https://<api-endpoint>/groups/<group_id>/watched/550
+   ```
+
+### Testing Movie Detail Locally
+
+1. **Get movie detail (no group context):**
+   ```bash
+   curl -H "Authorization: Bearer <token>" \
+     https://<api-endpoint>/movies/550
+   ```
+
+2. **Get movie detail with group context:**
+   ```bash
+   curl -H "Authorization: Bearer <token>" \
+     "https://<api-endpoint>/movies/550?group_id=<group_id>"
    ```
 
 ## CDK Deployment
