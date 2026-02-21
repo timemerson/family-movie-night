@@ -17,6 +17,42 @@ vi.mock("../../src/lib/dynamo.js", () => {
 import { __mockSend as mockSend } from "../../src/lib/dynamo.js";
 const mockSendFn = mockSend as unknown as ReturnType<typeof vi.fn>;
 
+// Mock fetch for TMDB API
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
+
+const tmdbDetailResponse = {
+  id: 550,
+  title: "Fight Club",
+  release_date: "1999-10-15",
+  poster_path: "/pB8...",
+  overview: "A ticking-time-bomb insomniac...",
+  runtime: 139,
+  genres: [
+    { id: 18, name: "Drama" },
+    { id: 53, name: "Thriller" },
+  ],
+  popularity: 61.4,
+  vote_average: 8.4,
+  credits: { cast: [] },
+  videos: { results: [] },
+  release_dates: {
+    results: [
+      {
+        iso_3166_1: "US",
+        release_dates: [{ certification: "R" }],
+      },
+    ],
+  },
+};
+
+function mockTmdbSuccess() {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => tmdbDetailResponse,
+  });
+}
+
 function createApp() {
   const app = new Hono();
   app.use("/*", authMiddleware());
@@ -63,6 +99,7 @@ function makeRequest(
 describe("Pick routes", () => {
   beforeEach(() => {
     mockSendFn.mockReset();
+    mockFetch.mockReset();
   });
 
   describe("POST /groups/:group_id/picks/:pick_id/watched", () => {
@@ -148,6 +185,12 @@ describe("Pick routes", () => {
       mockSendFn.mockResolvedValueOnce({
         Item: { group_id: "g-1", user_id: "user-123", role: "member" },
       });
+      // TMDB cache lookup — miss
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+      // TMDB fetch
+      mockTmdbSuccess();
+      // TMDB cache write
+      mockSendFn.mockResolvedValueOnce({});
       // markDirectlyWatched: check direct watched — not found
       mockSendFn.mockResolvedValueOnce({ Item: undefined });
       // markDirectlyWatched: check pick watched — no picks
@@ -158,17 +201,13 @@ describe("Pick routes", () => {
       mockSendFn.mockResolvedValueOnce({ Item: undefined });
 
       const res = await makeRequest("POST", "/groups/g-1/watched", {
-        body: {
-          tmdb_movie_id: 550,
-          title: "Fight Club",
-          poster_path: "/pB8...",
-          year: 1999,
-        },
+        body: { tmdb_movie_id: 550 },
       });
 
       expect(res.status).toBe(201);
       const body = (await res.json()) as any;
       expect(body.tmdb_movie_id).toBe(550);
+      expect(body.title).toBe("Fight Club");
       expect(body.source).toBe("direct");
       expect(body.marked_by).toBe("user-123");
     });
@@ -178,18 +217,19 @@ describe("Pick routes", () => {
       mockSendFn.mockResolvedValueOnce({
         Item: { group_id: "g-1", user_id: "user-123", role: "member" },
       });
+      // TMDB cache lookup — miss
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+      // TMDB fetch
+      mockTmdbSuccess();
+      // TMDB cache write
+      mockSendFn.mockResolvedValueOnce({});
       // markDirectlyWatched: check direct watched — found
       mockSendFn.mockResolvedValueOnce({
         Item: { group_id: "g-1", tmdb_movie_id: 550 },
       });
 
       const res = await makeRequest("POST", "/groups/g-1/watched", {
-        body: {
-          tmdb_movie_id: 550,
-          title: "Fight Club",
-          poster_path: "/pB8...",
-          year: 1999,
-        },
+        body: { tmdb_movie_id: 550 },
       });
 
       expect(res.status).toBe(409);
@@ -200,12 +240,7 @@ describe("Pick routes", () => {
       mockSendFn.mockResolvedValueOnce({ Item: undefined });
 
       const res = await makeRequest("POST", "/groups/g-1/watched", {
-        body: {
-          tmdb_movie_id: 550,
-          title: "Fight Club",
-          poster_path: "/pB8...",
-          year: 1999,
-        },
+        body: { tmdb_movie_id: 550 },
       });
 
       expect(res.status).toBe(403);

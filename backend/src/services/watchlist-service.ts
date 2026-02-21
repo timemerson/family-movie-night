@@ -35,12 +35,6 @@ export class WatchlistService {
       content_rating: string;
     },
   ): Promise<WatchlistItem> {
-    // Check if already on watchlist
-    const existing = await this.isOnWatchlist(groupId, tmdbMovieId);
-    if (existing) {
-      throw new ConflictError("Already on Watchlist");
-    }
-
     // Check if already watched (direct)
     const directWatched = await this.docClient.send(
       new GetCommand({
@@ -68,7 +62,7 @@ export class WatchlistService {
       throw new ValidationError("Already watched");
     }
 
-    // Check watchlist count
+    // Check watchlist count (pre-check for fast rejection)
     const count = await this.getWatchlistCount(groupId);
     if (count >= MAX_WATCHLIST_SIZE) {
       throw new ValidationError("Watchlist is full");
@@ -87,12 +81,21 @@ export class WatchlistService {
       content_rating: metadata.content_rating,
     };
 
-    await this.docClient.send(
-      new PutCommand({
-        TableName: this.watchlistTable,
-        Item: item,
-      }),
-    );
+    // Use attribute_not_exists to atomically prevent duplicate inserts
+    try {
+      await this.docClient.send(
+        new PutCommand({
+          TableName: this.watchlistTable,
+          Item: item,
+          ConditionExpression: "attribute_not_exists(group_id)",
+        }),
+      );
+    } catch (err: any) {
+      if (err.name === "ConditionalCheckFailedException") {
+        throw new ConflictError("Already on Watchlist");
+      }
+      throw err;
+    }
 
     return item;
   }

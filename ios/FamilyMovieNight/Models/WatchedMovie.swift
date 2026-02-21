@@ -25,7 +25,4 @@ struct WatchedMovie: Codable, Identifiable {
 
 struct MarkWatchedRequest: Encodable {
     let tmdbMovieId: Int
-    let title: String
-    let posterPath: String
-    let year: Int
 }

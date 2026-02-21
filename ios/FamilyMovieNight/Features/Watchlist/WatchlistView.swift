@@ -79,13 +79,10 @@ struct WatchlistView: View {
 
     @ViewBuilder
     private func movieDetailDestination(for item: WatchlistItem) -> some View {
-        let vm = MovieDetailViewModel()
-        MovieDetailView(viewModel: vm, tmdbMovieId: item.tmdbMovieId)
-            .onAppear {
-                if let apiClient, let groupId {
-                    vm.configure(apiClient: apiClient, groupId: groupId)
-                }
-            }
+        if let apiClient, let groupId {
+            let vm = MovieDetailViewModel(apiClient: apiClient, groupId: groupId)
+            MovieDetailView(viewModel: vm, tmdbMovieId: item.tmdbMovieId)
+        }
     }
 }
 

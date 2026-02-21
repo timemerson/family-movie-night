@@ -14,11 +14,6 @@ export const WatchlistItemSchema = z.object({
 
 export const AddToWatchlistSchema = z.object({
   tmdb_movie_id: z.number({ required_error: "tmdb_movie_id is required" }),
-  title: z.string({ required_error: "title is required" }),
-  poster_path: z.string({ required_error: "poster_path is required" }),
-  year: z.number({ required_error: "year is required" }),
-  genres: z.array(z.string()).default([]),
-  content_rating: z.string({ required_error: "content_rating is required" }),
 });
 
 export type WatchlistItem = z.infer<typeof WatchlistItemSchema>;

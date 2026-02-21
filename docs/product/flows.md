@@ -242,14 +242,275 @@
 
 ---
 
-## Flow Diagram Summary
+---
+
+## Flow 7: Pick Tonight's Movie (End-to-End)
+
+**Entry:** Group home screen. Someone says "let's pick a movie tonight." This flow ties together suggestions, watchlist integration, proposals, voting, and the final pick.
+
+```
+1. Group home
+   - Member taps "Pick Tonight's Movie" (primary CTA)
+   [?] Is there an active voting round?
+   ├── Yes → Jump to step 5 (voting screen)
+   └── No → step 2
+
+2. Generate suggestions
+   - *System runs the suggestion algorithm (see Flow 5, step 2)*
+   - Returns 5–8 movies
+   - Loading state: "Finding movies your family will love..."
+
+3. Watchlist integration prompt
+   [?] Does the group Watchlist have eligible movies?
+   ├── No → skip to step 4
+   └── Yes → Prompt: "Your Watchlist has [N] movies. Include some
+       in tonight's vote?"
+       ├── "Yes" → Up to 4 Watchlist movies are added to the round
+       │   with "From Watchlist" tags. Count against 4-proposal cap.
+       └── "No" → Proceed with algorithm suggestions only.
+
+4. Round created
+   - *System creates a voting round with the suggestions
+     (+ any Watchlist additions)*
+   - *All group members receive push notification:
+     "[Name] started a voting round! Cast your votes."*
+   - Creator is taken to the voting screen → step 5
+
+5. Voting screen
+   - Shows all movies (algorithm + proposals + Watchlist)
+   - Each movie: poster, title, year, source tag (if proposed/Watchlist),
+     👍 and 👎 buttons
+   - Tap a movie → movie detail (Flow 9)
+   - Progress: "3 of 4 members have voted"
+   - Member votes on movies they have opinions on → step 6
+
+   [?] Does the member want to propose a movie?
+   ├── Yes → "Propose a Movie" button → search (Flow 10) → proposed
+   │   movie appears in the list
+   └── No → continue voting
+
+6. Member finishes voting
+   - "Done Voting" button → member sees waiting state
+   [?] All members done OR creator closes early?
+   ├── Not yet → Waiting screen with progress indicator
+   │   Creator sees "Close Voting Early" button
+   │   *1-hour nudge notification to non-voters*
+   └── Yes → step 7
+
+7. Results screen
+   - Movies ranked by net score (up minus down)
+   - Each movie shows vote breakdown + who voted what
+   - Source tags preserved (Proposed by, From Watchlist)
+   - Ties broken by TMDB popularity
+
+   [?] Clear winner?
+   ├── Yes → Winner highlighted with crown
+   └── No (tie or all zero) → Tied movies shown equally;
+       creator chooses
+
+8. Lock in the pick
+   - Creator taps "Pick This One" on chosen movie
+   - *All members notified: "Tonight's movie: [Title]!"*
+   - Screen shows pick confirmation:
+     - Movie poster and details
+     - "Where to Watch" deep link
+     - "We Watched It" button → Flow 4
+
+9. Post-pick
+   - *Round archived to history*
+   - *If the picked movie was from the Watchlist, it remains on the
+     Watchlist until marked watched (then auto-removed)*
+   - Group home returns to default state
+```
+
+**Key difference from Flow 5+6:** This flow integrates Watchlist promotion (step 3), mid-round proposals (step 5), and source attribution throughout. It represents the complete "movie night" experience.
+
+---
+
+## Flow 8: Add to Watchlist from Suggestion or Detail
+
+**Entry A:** User is viewing the suggestion shortlist (before or during a round).
+**Entry B:** User is on a movie detail screen (from any context).
+**Entry C:** User is viewing TMDB search results.
+
+```
+1. User sees a movie they want to save
+
+   --- From suggestion card (Entry A) ---
+   - "Save for Later" icon button on the card
+   - Tap → step 2 (no navigation)
+
+   --- From movie detail screen (Entry B) ---
+   - "Add to Watchlist" button in the actions section
+   - Tap → step 2
+
+   --- From search results (Entry C) ---
+   - "Add to Watchlist" action on each result
+   - Tap → step 2
+
+2. Pre-check
+   [?] Is the movie already on the Watchlist?
+   ├── Yes → Show "Already on Watchlist" (disabled state). Done.
+   └── No → step 3
+
+   [?] Is the movie on the Watched list?
+   ├── Yes → Show "Already watched." Done.
+   └── No → step 3
+
+   [?] Is the Watchlist full (50 movies)?
+   ├── Yes → Show "Watchlist is full. Remove a movie to make room."
+   │   CTA: "Go to Watchlist" → Watchlist screen. Done.
+   └── No → step 3
+
+3. Add to Watchlist
+   - *Movie added with attribution: added_by = current user,
+     added_at = now*
+   - Button changes to "On Watchlist" (disabled/check state)
+   - Brief success toast: "Added to Watchlist"
+   - *No push notification to other members (too noisy for a save action)*
+
+4. Done
+   - User stays on their current screen
+   - The movie remains in the suggestion list or search results
+     (adding to Watchlist does NOT remove it from view)
+```
+
+**Assumption:** Adding to the Watchlist is a lightweight, low-friction action. No confirmation dialog, no navigation, no disruption to the current flow.
+
+---
+
+## Flow 9: Movie Detail + Mark as Watched
+
+**Entry:** User taps a movie from any context — suggestion card, Watchlist, Watched history, search result, or voting round.
+
+```
+1. Movie detail screen loads
+   - *System fetches movie metadata from TMDB (cached)*
+   - Shows: poster, title, year, runtime, synopsis, cast (top 5),
+     genres, content rating, streaming availability, trailer link
+
+2. Group context section
+   - *System checks group state for this movie:*
+
+   [?] On the Watchlist?
+   ├── Yes → Badge: "On your Watchlist — added by [Name] on [Date]"
+   │   Actions: "Remove from Watchlist" (if adder or creator)
+   └── No → Action: "Add to Watchlist"
+
+   [?] On the Watched list?
+   ├── Yes → Badge: "Watched on [Date]"
+   │   - Shows group avg rating and individual ratings (if any)
+   │   - [?] Was it directly marked within the last 24 hours
+   │     by this user?
+   │     ├── Yes → "Undo Watched" action available
+   │     └── No → No undo
+   └── No → Action: "Already Watched" button
+
+   [?] Was this movie in a previous round?
+   ├── Yes → "Vote history: [N] up / [N] down on [Date]"
+   └── No → (nothing shown)
+
+   [?] Is this movie in the active round?
+   ├── Yes → "In tonight's vote: [N] up / [N] down so far"
+   │   - Shows the user's own vote (if cast)
+   │   - User can vote directly from detail screen
+   └── No → (nothing shown)
+
+3. User taps "Already Watched"
+   - Confirmation dialog: "Mark as watched for the whole group?
+     It won't appear in future suggestions."
+   - "Mark Watched" / "Cancel"
+
+4. Mark as watched
+   - *Movie added to group Watched list:
+     marked_by = current user, watched_at = now*
+   - *If movie was on Watchlist → automatically removed*
+   - *If movie is in active round → "Watched" badge added
+     to the movie in the round; no disruption to voting*
+   - Button changes to "Watched on [Date]"
+
+5. Rating prompt (optional)
+   - "How was it? Rate this movie."
+   - 1–5 star tap selector
+   - "Save" → *rating stored for this member*
+   - "Skip" → dismiss
+
+6. Done
+   - User remains on the detail screen
+   - Updated state reflected (Watched badge, removed from Watchlist
+     if applicable)
+```
+
+---
+
+## Flow 10: Propose a Movie for Tonight
+
+**Entry:** A voting round is active. A member wants to add a specific movie that isn't in the current suggestion list.
+
+```
+1. Member taps "Propose a Movie" from the voting screen
+   [?] Has this member already proposed 2 movies this round?
+   ├── Yes → "You've proposed the max (2) for this round."
+   │   CTA: "Add to Watchlist instead" → Watchlist flow. Done.
+   └── No → step 2
+
+   [?] Has the round hit 4 total proposals?
+   ├── Yes → "This round has enough proposals."
+   │   CTA: "Add to Watchlist instead." Done.
+   └── No → step 2
+
+2. Search for a movie
+   - Text input: "Search by movie title..."
+   - *Searches TMDB API (debounced, min 3 characters)*
+   - Results: poster thumbnail, title, year, content rating
+   - Grayed out / excluded results:
+     - Movies already in the round: "Already in tonight's vote"
+     - Movies on the Watched list: "Already watched"
+     - Movies exceeding content-rating ceiling: "Exceeds group rating"
+
+3. Member selects a movie
+   - Taps a valid result → brief movie summary shown
+   - "Propose This Movie" button
+
+4. Confirm proposal
+   - *Movie added to the round's suggestion list:*
+     - proposed_by = current user
+     - Tagged "Proposed by [Name]"
+   - *All group members see the new movie in the voting screen*
+   - *No push notification for a proposal (members are already
+     in the voting flow)*
+   - Member returns to the voting screen with the new movie visible
+
+5. Voting
+   - The proposed movie is votable immediately
+   - Members who already tapped "Done Voting" are NOT re-prompted
+     (they can reopen the voting screen to see/vote on proposals)
+   - The proposed movie is included in final results ranking
+```
+
+**Assumption:** Proposals are expected to be infrequent (1–2 per round). The caps (2 per member, 4 per round) are a safety net, not a feature the typical family will hit.
+
+---
+
+## Flow Diagram Summary (Updated)
 
 ```
 Onboarding → Group Creation → Set Preferences
                   ↓
             Invite Family
                   ↓
-          Suggest Movies → Vote → Pick → Watch → Rate
-                  ↑___________________________|
-                       (repeat weekly)
+     ┌─── Search ──► Add to Watchlist ◄── Suggestion "Save for Later"
+     │                    │
+     │         (optional promotion at round start)
+     │                    ▼
+     └─► Suggest Movies + Watchlist ──► Vote ──► Pick ──► Watch ──► Rate
+              ▲    (+ Proposals)          │
+              │                           │
+              │     Movie Detail ◄────────┘
+              │       │
+              │       ├── Add to Watchlist
+              │       ├── Mark Watched
+              │       └── Propose for Tonight
+              │
+              └──────────── (repeat weekly)
 ```

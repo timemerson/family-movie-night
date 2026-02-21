@@ -17,6 +17,35 @@ vi.mock("../../src/lib/dynamo.js", () => {
 import { __mockSend as mockSend } from "../../src/lib/dynamo.js";
 const mockSendFn = mockSend as unknown as ReturnType<typeof vi.fn>;
 
+// Mock fetch for TMDB API
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
+
+const tmdbDetailResponse = {
+  id: 550,
+  title: "Fight Club",
+  release_date: "1999-10-15",
+  poster_path: "/pB8...",
+  overview: "A ticking-time-bomb insomniac...",
+  runtime: 139,
+  genres: [
+    { id: 18, name: "Drama" },
+    { id: 53, name: "Thriller" },
+  ],
+  popularity: 61.4,
+  vote_average: 8.4,
+  credits: { cast: [] },
+  videos: { results: [] },
+  release_dates: {
+    results: [
+      {
+        iso_3166_1: "US",
+        release_dates: [{ certification: "R" }],
+      },
+    ],
+  },
+};
+
 function createApp() {
   const app = new Hono();
   app.use("/*", authMiddleware());
@@ -60,19 +89,30 @@ function makeRequest(
   return app.request(path, init, { event });
 }
 
+// Helper to set up mockFetch to return TMDB detail
+function mockTmdbSuccess() {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => tmdbDetailResponse,
+  });
+}
+
+function mockTmdbNotFound() {
+  mockFetch.mockResolvedValueOnce({
+    ok: false,
+    status: 404,
+  });
+}
+
 describe("Watchlist routes", () => {
   beforeEach(() => {
     mockSendFn.mockReset();
+    mockFetch.mockReset();
   });
 
   describe("POST /groups/:id/watchlist", () => {
     const validBody = {
       tmdb_movie_id: 550,
-      title: "Fight Club",
-      poster_path: "/pB8...",
-      year: 1999,
-      genres: ["Drama", "Thriller"],
-      content_rating: "R",
     };
 
     it("returns 201 on success", async () => {
@@ -80,15 +120,19 @@ describe("Watchlist routes", () => {
       mockSendFn.mockResolvedValueOnce({
         Item: { group_id: "g-1", user_id: "user-123", role: "member" },
       });
-      // isOnWatchlist — not found
+      // TMDB cache lookup — miss
       mockSendFn.mockResolvedValueOnce({ Item: undefined });
+      // TMDB fetch
+      mockTmdbSuccess();
+      // TMDB cache write
+      mockSendFn.mockResolvedValueOnce({});
       // Check direct watched — not found
       mockSendFn.mockResolvedValueOnce({ Item: undefined });
       // Check pick watched — no watched picks
       mockSendFn.mockResolvedValueOnce({ Items: [] });
       // getWatchlistCount — count 0
       mockSendFn.mockResolvedValueOnce({ Count: 0 });
-      // PutCommand
+      // Conditional PutCommand
       mockSendFn.mockResolvedValueOnce({});
 
       const res = await makeRequest("POST", "/groups/g-1/watchlist", {
@@ -103,15 +147,46 @@ describe("Watchlist routes", () => {
       expect(body.added_at).toBeTruthy();
     });
 
+    it("returns 404 when TMDB movie not found", async () => {
+      // requireMember
+      mockSendFn.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "user-123", role: "member" },
+      });
+      // TMDB cache lookup — miss
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+      // TMDB fetch — 404
+      mockTmdbNotFound();
+
+      const res = await makeRequest("POST", "/groups/g-1/watchlist", {
+        body: validBody,
+      });
+
+      expect(res.status).toBe(404);
+      const body = (await res.json()) as any;
+      expect(body.error).toBe("Movie not found on TMDB");
+    });
+
     it("returns 409 for duplicate", async () => {
       // requireMember
       mockSendFn.mockResolvedValueOnce({
         Item: { group_id: "g-1", user_id: "user-123", role: "member" },
       });
-      // isOnWatchlist — found
-      mockSendFn.mockResolvedValueOnce({
-        Item: { group_id: "g-1", tmdb_movie_id: 550 },
-      });
+      // TMDB cache lookup — miss
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+      // TMDB fetch
+      mockTmdbSuccess();
+      // TMDB cache write
+      mockSendFn.mockResolvedValueOnce({});
+      // Check direct watched — not found
+      mockSendFn.mockResolvedValueOnce({ Item: undefined });
+      // Check pick watched — no watched picks
+      mockSendFn.mockResolvedValueOnce({ Items: [] });
+      // getWatchlistCount — count 0
+      mockSendFn.mockResolvedValueOnce({ Count: 0 });
+      // Conditional PutCommand — ConditionalCheckFailedException (duplicate)
+      const conditionError = new Error("Conditional check failed");
+      (conditionError as any).name = "ConditionalCheckFailedException";
+      mockSendFn.mockRejectedValueOnce(conditionError);
 
       const res = await makeRequest("POST", "/groups/g-1/watchlist", {
         body: validBody,
@@ -127,8 +202,12 @@ describe("Watchlist routes", () => {
       mockSendFn.mockResolvedValueOnce({
         Item: { group_id: "g-1", user_id: "user-123", role: "member" },
       });
-      // isOnWatchlist — not found
+      // TMDB cache lookup — miss
       mockSendFn.mockResolvedValueOnce({ Item: undefined });
+      // TMDB fetch
+      mockTmdbSuccess();
+      // TMDB cache write
+      mockSendFn.mockResolvedValueOnce({});
       // Check direct watched — found
       mockSendFn.mockResolvedValueOnce({
         Item: { group_id: "g-1", tmdb_movie_id: 550 },
@@ -148,8 +227,12 @@ describe("Watchlist routes", () => {
       mockSendFn.mockResolvedValueOnce({
         Item: { group_id: "g-1", user_id: "user-123", role: "member" },
       });
-      // isOnWatchlist — not found
+      // TMDB cache lookup — miss
       mockSendFn.mockResolvedValueOnce({ Item: undefined });
+      // TMDB fetch
+      mockTmdbSuccess();
+      // TMDB cache write
+      mockSendFn.mockResolvedValueOnce({});
       // Check direct watched — not found
       mockSendFn.mockResolvedValueOnce({ Item: undefined });
       // Check pick watched — no watched picks

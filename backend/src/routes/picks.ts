@@ -4,9 +4,10 @@ import { GroupService } from "../services/group-service.js";
 import { PickService } from "../services/pick-service.js";
 import { WatchlistService } from "../services/watchlist-service.js";
 import { WatchedService } from "../services/watched-service.js";
+import { TMDBClient } from "../services/tmdb-client.js";
 import { MarkWatchedDirectSchema } from "../models/watched-movie.js";
 import { getDocClient, tableName } from "../lib/dynamo.js";
-import { ValidationError } from "../lib/errors.js";
+import { NotFoundError, ValidationError } from "../lib/errors.js";
 
 const picks = new Hono<AppEnv>();
 
@@ -45,6 +46,14 @@ function getWatchedService() {
   );
 }
 
+function getTmdbClient() {
+  return new TMDBClient(
+    process.env.TMDB_API_KEY ?? "",
+    getDocClient(),
+    tableName("TMDB_CACHE"),
+  );
+}
+
 // POST /groups/:group_id/picks/:pick_id/watched — mark a pick as watched
 picks.post("/groups/:group_id/picks/:pick_id/watched", async (c) => {
   const userId = c.get("userId");
@@ -74,15 +83,22 @@ picks.post("/groups/:group_id/watched", async (c) => {
     throw new ValidationError(parsed.error.issues[0].message);
   }
 
+  // Fetch verified metadata from TMDB
+  const tmdbClient = getTmdbClient();
+  const detail = await tmdbClient.getMovieDetails(parsed.data.tmdb_movie_id);
+  if (!detail) {
+    throw new NotFoundError("Movie not found on TMDB");
+  }
+
   const watchedService = getWatchedService();
   const item = await watchedService.markDirectlyWatched(
     groupId,
     parsed.data.tmdb_movie_id,
     userId,
     {
-      title: parsed.data.title,
-      poster_path: parsed.data.poster_path,
-      year: parsed.data.year,
+      title: detail.title,
+      poster_path: detail.poster_path ?? "",
+      year: detail.year,
     },
   );
 

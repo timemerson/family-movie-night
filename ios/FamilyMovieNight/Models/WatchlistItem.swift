@@ -26,9 +26,4 @@ struct WatchlistItem: Codable, Identifiable {
 
 struct AddToWatchlistRequest: Encodable {
     let tmdbMovieId: Int
-    let title: String
-    let posterPath: String
-    let year: Int
-    let genres: [String]
-    let contentRating: String
 }

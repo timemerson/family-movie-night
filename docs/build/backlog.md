@@ -63,13 +63,103 @@ See [task-05-followups.md](task-05-followups.md) for full details on each follow
 
 ---
 
+### Slice A — Watchlists + Movie Details + Mark Watched
+
+**Plan:** [plan-slice-a.md](plan-slice-a.md) | **Test matrix:** [../testing/test-matrix-slice-a.md](../testing/test-matrix-slice-a.md)
+
+- [ ] (ready) **A1: Watchlist backend** — CDK table, model, service, routes, tests
+  - User stories: US-26, US-27, US-28, US-34, US-40 (partial)
+  - New files: `models/watchlist.ts`, `services/watchlist-service.ts`, `routes/watchlist.ts`
+  - CDK: watchlistTable + IAM grant
+  - 31 tests (see test matrix SA-001 through SA-031)
+
+- [ ] (blocked on A1) **A2: Direct mark-watched + combined watched list** — CDK table, service, routes, tests
+  - User stories: US-33, US-35, US-36, US-40 (complete)
+  - New files: `models/watched-movie.ts`, `services/watched-service.ts`
+  - CDK: watchedMoviesTable + IAM grant
+  - Cross-list: auto-remove from watchlist when marking watched
+  - Updates `suggestion-service.ts` to use combined watched IDs
+  - 34 tests (see test matrix SA-032 through SA-065)
+
+- [ ] (blocked on A1, A2) **A3: Movie detail endpoint with group context** — route, tests
+  - User stories: US-12, US-32
+  - New files: `routes/movies.ts`
+  - CDK: IAM grants for roundsTable, suggestionsTable, votesTable
+  - 15 tests (see test matrix SA-066 through SA-080)
+
+- [ ] (blocked on A1, A2, A3) **A4: iOS Watchlist + Movie Detail + Mark Watched UI** — SwiftUI views
+  - User stories: US-26, US-27, US-28, US-32, US-33, US-34
+  - New files: WatchlistView, MovieDetailView, viewmodels, models
+  - Updates: APIClient.swift, HomeView, SuggestionsView
+
+---
+
+### Slice B — Tonight Queue + Voting + Select Winner
+
+**Plan:** [plan-slice-b.md](plan-slice-b.md) | **Test matrix:** [../testing/test-matrix-slice-b.md](../testing/test-matrix-slice-b.md)
+
+**Depends on:** Slice A (watchlist integration at round start)
+
+- [ ] (blocked on Slice A) **B1: Round service + create round endpoint** — model, service, routes, tests
+  - User stories: US-11, US-13, US-31, US-41 (partial)
+  - New files: `models/round.ts`, `services/round-service.ts`, `routes/rounds.ts`
+  - CDK: IAM grants for roundsTable, suggestionsTable
+  - Watchlist integration at round start
+  - One-active-round constraint
+  - 36 tests (see test matrix SB-001 through SB-036)
+
+- [ ] (blocked on B1) **B2: Voting service + endpoints** — model, service, routes, tests
+  - User stories: US-14, US-15, US-41
+  - New files: `models/vote.ts`, `services/vote-service.ts`, `routes/votes.ts`
+  - CDK: IAM grant for votesTable
+  - Concurrent vote tests (simultaneous votes)
+  - 36 tests (see test matrix SB-037 through SB-072)
+
+- [ ] (blocked on B1, B2) **B3: Pick lock-in + round lifecycle** — service extension, routes, tests
+  - User stories: US-16, US-18
+  - `POST /rounds/:round_id/pick` with conditional write
+  - Round status lifecycle (voting → closed → picked)
+  - Concurrent double-tap tests
+  - 24 tests (see test matrix SB-073 through SB-096)
+
+- [ ] (blocked on B1, B2, B3) **B4: iOS voting flow UI** — SwiftUI views
+  - User stories: US-14, US-15, US-16
+  - New files: VotingView, ResultsView, PickConfirmationView, viewmodels
+  - Updates: APIClient.swift, HomeView, SuggestionsView
+
+---
+
+## Follow-Up Backlog (Can Slot In Anytime)
+
+| Task | Priority | Depends On | Status |
+|---|---|---|---|
+| 02-A: Amplify config failure | P1 | — | ready |
+| 02-B: confirmSignUp + signIn failure | P1 | — | ready |
+| 04-C: Preference cleanup on leave | P1 | — | ready |
+| 05-A: Cache null-handling bug | P1 | — | ready |
+| 05-B: Validate TMDB API key | P1 | — | ready |
+| 02-C: MFA / challenge flows | P2 | — | ready |
+| 02-D: Atomic state update | P2 | — | ready |
+| 02-E: Env-specific Amplify config | P2 | — | ready |
+| 04-D: TMDB genre ID validation | P2 | — | ready |
+| 05-C: Empty with_genres param | P2 | — | ready |
+| 05-D: Missing ADR-0003 | P2 | — | ready |
+| 05-E: Cap exclude_movie_ids | P2 | — | ready |
+| 05-F: Wire up content_rating | P2 | 05-A | ready |
+
+---
+
 ## Dependency Graph
 
 ```
-04-A (pref summary) ──┐
-                       ├──► Task 05 (suggestions) ✅
-04-B (picks/watched) ──┘
+                    ┌──► A2 ──► A3 ──┐
+Task 05 (done) ──► A1                ├──► A4 (iOS)
+                    └────────────────┘
+                                       │
+                                       ▼
+                    ┌──► B2 ──► B3 ──┐
+                 B1                   ├──► B4 (iOS)
+                    └────────────────┘
 
-04-C (cleanup on leave) ──► independent, do anytime
-04-D (genre validation) ──► independent, do anytime
+Follow-ups (04-C, 05-A/B, etc.) ──► independent, slot anytime
 ```

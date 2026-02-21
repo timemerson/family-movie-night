@@ -222,3 +222,200 @@
 - Child profile is linked to the parent's account (not a separate sign-up).
 - Parent sets the child's preferences on their behalf.
 - Child profile has a mandatory content-rating ceiling of PG.
+
+---
+
+## Watchlist
+
+### US-26: Add a movie to the group watchlist (P0)
+**As a** group member, **I want to** save a movie to the group's shared Watchlist **so that** we can consider it for a future movie night.
+
+**Acceptance Criteria:**
+- "Add to Watchlist" action is available from suggestion cards, movie detail screen, and search results.
+- The movie is added to the group's Watchlist with attribution (who added it, when).
+- If the movie is already on the Watchlist, the button is disabled with "Already on Watchlist."
+- If the movie is on the Watched list, the action is blocked with "You've already watched this."
+- Watchlist has a maximum of 50 movies. If full, the user sees "Watchlist is full. Remove a movie to make room."
+- All group members can see the updated Watchlist immediately.
+
+### US-27: View the group watchlist (P0)
+**As a** group member, **I want to** browse our group's Watchlist **so that** I can see what movies we're considering.
+
+**Acceptance Criteria:**
+- Watchlist is accessible from the group home screen.
+- Movies are displayed in reverse chronological order (most recently added first).
+- Each entry shows: poster thumbnail, title, year, genre tags, content rating, who added it, and streaming availability badges.
+- Tapping a movie opens the full movie detail screen.
+- Empty state: "No movies saved yet. Add movies from suggestions or search."
+
+### US-28: Remove a movie from the watchlist (P1)
+**As a** group member, **I want to** remove a movie from the Watchlist **so that** the list stays relevant and manageable.
+
+**Acceptance Criteria:**
+- Swipe-to-delete on any Watchlist entry (or "Remove" button on movie detail).
+- A member can remove movies they added. The group creator can remove any movie.
+- Non-creator members cannot remove movies added by others.
+- Removal is immediate with a brief undo toast (3 seconds).
+
+---
+
+## Movie Discovery
+
+### US-29: Search for a movie by title (P1)
+**As a** group member, **I want to** search for a specific movie **so that** I can add it to the Watchlist or propose it for tonight.
+
+**Acceptance Criteria:**
+- Search is accessible from the Watchlist screen and from the active round screen.
+- Text input searches TMDB by title. Results appear as the user types (debounced, minimum 3 characters).
+- Results show: poster thumbnail, title, year, and content rating.
+- Movies that exceed the group's content-rating ceiling are shown but grayed out with "Exceeds group rating."
+- Movies already on the Watched list are shown with a "Watched" badge.
+- Tapping a result opens the movie detail screen with available actions (Add to Watchlist, Propose for Tonight, etc.).
+- Search queries are not stored or shared with group members.
+
+---
+
+## Proposing Movies
+
+### US-30: Propose a movie for the active voting round (P1)
+**As a** group member, **I want to** add a specific movie to tonight's voting round **so that** the family can vote on my suggestion alongside the algorithm picks.
+
+**Acceptance Criteria:**
+- "Propose for Tonight" action is available on movie detail and Watchlist when a voting round is active.
+- The movie is added to the round's suggestion list with a "Proposed by [Name]" tag.
+- The movie must not already be in the round, must not be on the Watched list, and must meet the group's content-rating ceiling.
+- Each member can propose up to 2 movies per round. A 4-movie total proposal cap per round applies.
+- If the member has hit their limit: "You've already proposed 2 movies this round."
+- If the round cap is hit: "This round has enough proposals. Try adding to the Watchlist instead."
+- All group members see the new proposal immediately. Members who haven't voted on it yet see it in their voting queue.
+- If no round is active, the action is replaced with "Add to Watchlist" and a helper: "No round active. Save it for next time?"
+
+### US-31: Include watchlist movies when starting a round (P1)
+**As a** group member starting a voting round, **I want to** optionally include Watchlist movies **so that** saved favorites get a chance to be voted on.
+
+**Acceptance Criteria:**
+- After the algorithm generates suggestions, if the Watchlist has eligible movies (not watched, within content-rating ceiling), a prompt appears: "Your Watchlist has [N] movies. Include some in tonight's vote?"
+- If yes, up to 4 Watchlist movies (most recently added) are added to the round with a "From Watchlist" tag.
+- These count against the round's 4-proposal cap.
+- If no, the round proceeds with algorithm suggestions only.
+- If the Watchlist is empty or has no eligible movies, the prompt is skipped.
+- Watchlist movies included in the round are NOT removed from the Watchlist (they stay until picked or manually removed).
+
+---
+
+## Movie Detail & Actions
+
+### US-32: View movie detail with group context (P0)
+**As a** group member, **I want to** see a movie's full details along with my group's history with it **so that** I can make informed decisions.
+
+**Acceptance Criteria:**
+- All fields from US-12 are shown (poster, title, year, runtime, synopsis, cast top 5, genres, content rating, streaming, trailer link).
+- **Watchlist status:** If on the Watchlist, show "On your Watchlist — added by [Name] on [Date]." If not, show "Add to Watchlist" button.
+- **Watched status:** If watched, show "Watched on [Date]" with the group's average rating (if rated). If not, show "Already Watched" button.
+- **Vote history:** If this movie appeared in a previous round, show the vote summary (e.g., "Suggested on Feb 14 — 3 up, 1 down").
+- **Current round:** If this movie is in the active round, show current vote tally and the user's own vote (if cast).
+- Available actions depend on context (see collaboration-rules.md Section 6).
+
+### US-33: Mark any movie as "already watched" (P0)
+**As a** group member, **I want to** mark a movie as watched from its detail screen **so that** it doesn't appear in future suggestions, even if we didn't pick it through the app.
+
+**Acceptance Criteria:**
+- "Already Watched" button on the movie detail screen (when the movie is not yet marked watched).
+- Tapping it adds the movie to the group's Watched list with attribution (who marked it, when).
+- The movie is excluded from future suggestion algorithm results.
+- If the movie is on the Watchlist, it is automatically removed from the Watchlist.
+- If the movie is in the active round, it remains in the round but gains a "Watched" badge. A brief inline note: "[Name] marked this as already watched."
+- Optional rating prompt appears after marking: "Rate it?" (1–5 stars), skippable.
+- Confirmation before marking: "Mark as watched for the whole group? It won't appear in future suggestions."
+
+### US-34: Add to watchlist from movie detail or suggestion card (P0)
+**As a** group member, **I want to** add a movie to the Watchlist directly from its detail screen or suggestion card **so that** I can quickly save interesting movies.
+
+**Acceptance Criteria:**
+- "Add to Watchlist" button on the movie detail screen (when not already on Watchlist or Watched).
+- "Save for Later" quick-action on suggestion cards in the suggestion shortlist (icon button, no navigation required).
+- After adding, the button changes to "On Watchlist" (disabled state) with a brief success toast.
+- If the Watchlist is full (50 movies), the action is blocked with "Watchlist is full."
+- Adding a movie does NOT remove it from the current suggestion shortlist or round.
+
+---
+
+## Watched List
+
+### US-35: View the group's complete watched list (P1)
+**As a** group member, **I want to** see all the movies our group has watched **so that** we can reminisce and track our movie night history.
+
+**Acceptance Criteria:**
+- Accessible from the group home screen (tab or section).
+- Combines both sources: movies picked through voting rounds AND movies directly marked as watched.
+- Each entry shows: poster thumbnail, title, year, date watched, who marked/picked it, and average group rating (if rated).
+- Movies that went through a round show "Picked" badge; directly marked movies show "Marked by [Name]."
+- Sorted reverse chronologically (most recently watched first).
+- Tapping a movie opens the detail view with vote history (for picked movies) and rating details.
+- This extends US-20 (which only covered picked movies).
+
+### US-36: Un-mark a directly-watched movie (P2)
+**As a** group member, **I want to** undo an accidental "already watched" mark **so that** the movie can appear in suggestions again.
+
+**Acceptance Criteria:**
+- "Undo Watched" action available on the movie detail screen for directly-marked movies only (not for movies picked through rounds).
+- Only available within 24 hours of the original mark.
+- Only the member who marked it (or the group creator) can undo.
+- After 24 hours, the action disappears; the movie is permanently on the Watched list.
+- Undoing restores the movie to its previous state (back on Watchlist if it was there before, otherwise just unmarked).
+
+---
+
+## Round Management
+
+### US-37: See proposal source for each movie in a round (P2)
+**As a** group member, **I want to** see whether a movie in the voting round came from the algorithm, a member's proposal, or the Watchlist **so that** I understand where the options came from.
+
+**Acceptance Criteria:**
+- Each movie in the voting screen shows a subtle source tag:
+  - No tag for algorithm-generated suggestions (default)
+  - "Proposed by [Name]" for member proposals
+  - "From Watchlist" for Watchlist promotions
+- Tags are informational only and do not affect voting mechanics.
+
+### US-38: Remove a proposed movie from the active round (P2)
+**As the** member who proposed a movie (or the group creator), **I want to** remove my proposal from the round **so that** I can fix a mistake or make room for a different proposal.
+
+**Acceptance Criteria:**
+- "Remove Proposal" action on proposed movies in the round (not available for algorithm suggestions).
+- Available to the proposer or the group creator.
+- If votes have already been cast on the proposal, a confirmation is required: "This movie has [N] votes. Remove it anyway?"
+- Removing a proposal frees up one proposal slot (for the member and/or the round).
+- Votes on the removed proposal are discarded.
+
+---
+
+## Permissions & Edge Cases
+
+### US-39: New member sees existing group data (P0)
+**As a** new member who just joined a group, **I want to** immediately see the group's Watchlist, Watched list, and any active round **so that** I can participate right away.
+
+**Acceptance Criteria:**
+- Upon joining, the new member sees the full Watchlist and Watched history (no phased access).
+- If a voting round is active, the new member can vote on all movies in the round.
+- The new member's vote does not retroactively change already-displayed results for others (results update live).
+- The new member appears in the vote progress indicator (e.g., "3 of 5 members have voted").
+
+### US-40: Duplicate prevention across lists and suggestions (P0)
+**As the** system, **I need to** prevent the same movie from appearing in conflicting states **so that** the user experience is consistent.
+
+**Acceptance Criteria:**
+- A movie cannot be on the Watchlist and the Watched list simultaneously (marking watched removes from Watchlist).
+- A movie cannot be added to the Watchlist if it's already there (idempotent; show "Already on Watchlist").
+- The suggestion algorithm excludes all Watched movies (both picked and directly marked).
+- A movie already in the active round cannot be proposed again.
+- When "Show Me More" regenerates suggestions, previously shown movies AND Watchlist movies already in the round are excluded.
+
+### US-41: Handle round with zero votes (P1)
+**As the** group creator, **I want to** still be able to pick a movie even if no one voted **so that** we don't get stuck.
+
+**Acceptance Criteria:**
+- If the creator closes a round with zero votes, the results screen shows all movies at 0-0 scores.
+- Message: "No votes yet! Pick a movie or ask the family to weigh in."
+- The creator can pick any movie from the list.
+- If the creator doesn't pick and 24 hours pass, a nudge notification is sent: "Your movie night is waiting! Pick a movie or start a new round."

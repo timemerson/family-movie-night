@@ -2,9 +2,10 @@ import { Hono } from "hono";
 import type { AppEnv } from "../middleware/auth.js";
 import { GroupService } from "../services/group-service.js";
 import { WatchlistService } from "../services/watchlist-service.js";
+import { TMDBClient } from "../services/tmdb-client.js";
 import { AddToWatchlistSchema } from "../models/watchlist.js";
 import { getDocClient, tableName } from "../lib/dynamo.js";
-import { ValidationError } from "../lib/errors.js";
+import { NotFoundError, ValidationError } from "../lib/errors.js";
 
 const watchlist = new Hono<AppEnv>();
 
@@ -26,6 +27,14 @@ function getWatchlistService() {
   );
 }
 
+function getTmdbClient() {
+  return new TMDBClient(
+    process.env.TMDB_API_KEY ?? "",
+    getDocClient(),
+    tableName("TMDB_CACHE"),
+  );
+}
+
 // POST /groups/:group_id/watchlist — add movie to watchlist
 watchlist.post("/groups/:group_id/watchlist", async (c) => {
   const userId = c.get("userId");
@@ -40,17 +49,24 @@ watchlist.post("/groups/:group_id/watchlist", async (c) => {
     throw new ValidationError(parsed.error.issues[0].message);
   }
 
+  // Fetch verified metadata from TMDB
+  const tmdbClient = getTmdbClient();
+  const detail = await tmdbClient.getMovieDetails(parsed.data.tmdb_movie_id);
+  if (!detail) {
+    throw new NotFoundError("Movie not found on TMDB");
+  }
+
   const watchlistService = getWatchlistService();
   const item = await watchlistService.addToWatchlist(
     groupId,
     parsed.data.tmdb_movie_id,
     userId,
     {
-      title: parsed.data.title,
-      poster_path: parsed.data.poster_path,
-      year: parsed.data.year,
-      genres: parsed.data.genres,
-      content_rating: parsed.data.content_rating,
+      title: detail.title,
+      poster_path: detail.poster_path ?? "",
+      year: detail.year,
+      genres: detail.genres,
+      content_rating: detail.content_rating ?? "",
     },
   );
 

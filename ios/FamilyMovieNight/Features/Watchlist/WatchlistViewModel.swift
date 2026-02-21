@@ -42,12 +42,7 @@ class WatchlistViewModel: ObservableObject {
         guard let apiClient, let groupId else { return false }
         do {
             let request = AddToWatchlistRequest(
-                tmdbMovieId: movie.tmdbMovieId,
-                title: movie.title,
-                posterPath: movie.posterPath ?? "",
-                year: movie.year,
-                genres: movie.genres,
-                contentRating: movie.contentRating ?? ""
+                tmdbMovieId: movie.tmdbMovieId
             )
             let _: WatchlistItem = try await apiClient.request(
                 "POST",

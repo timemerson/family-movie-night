@@ -11,6 +11,13 @@ class MovieDetailViewModel: ObservableObject {
     private var apiClient: APIClient?
     private var groupId: String?
 
+    init() {}
+
+    init(apiClient: APIClient, groupId: String) {
+        self.apiClient = apiClient
+        self.groupId = groupId
+    }
+
     func configure(apiClient: APIClient, groupId: String) {
         guard self.apiClient == nil else { return }
         self.apiClient = apiClient
@@ -40,12 +47,7 @@ class MovieDetailViewModel: ObservableObject {
         actionInProgress = true
         do {
             let request = AddToWatchlistRequest(
-                tmdbMovieId: movie.tmdbMovieId,
-                title: movie.title,
-                posterPath: movie.posterPath ?? "",
-                year: movie.year,
-                genres: movie.genres,
-                contentRating: movie.contentRating ?? ""
+                tmdbMovieId: movie.tmdbMovieId
             )
             let _: WatchlistItem = try await apiClient.request(
                 "POST",
@@ -82,10 +84,7 @@ class MovieDetailViewModel: ObservableObject {
         actionInProgress = true
         do {
             let request = MarkWatchedRequest(
-                tmdbMovieId: movie.tmdbMovieId,
-                title: movie.title,
-                posterPath: movie.posterPath ?? "",
-                year: movie.year
+                tmdbMovieId: movie.tmdbMovieId
             )
             let _: WatchedMovie = try await apiClient.request(
                 "POST",

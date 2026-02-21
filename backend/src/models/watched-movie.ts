@@ -13,9 +13,6 @@ export const WatchedMovieSchema = z.object({
 
 export const MarkWatchedDirectSchema = z.object({
   tmdb_movie_id: z.number({ required_error: "tmdb_movie_id is required" }),
-  title: z.string({ required_error: "title is required" }),
-  poster_path: z.string({ required_error: "poster_path is required" }),
-  year: z.number({ required_error: "year is required" }),
 });
 
 export interface CombinedWatchedMovie {

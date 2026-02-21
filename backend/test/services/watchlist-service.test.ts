@@ -30,15 +30,13 @@ describe("WatchlistService", () => {
     };
 
     it("writes item and returns WatchlistItem", async () => {
-      // isOnWatchlist — GetCommand — not found
-      mockSend.mockResolvedValueOnce({ Item: undefined });
       // Check direct watched — GetCommand — not found
       mockSend.mockResolvedValueOnce({ Item: undefined });
       // Check pick watched — QueryCommand — no watched picks
       mockSend.mockResolvedValueOnce({ Items: [] });
       // getWatchlistCount — QueryCommand — count 0
       mockSend.mockResolvedValueOnce({ Count: 0 });
-      // PutCommand — success
+      // Conditional PutCommand — success
       mockSend.mockResolvedValueOnce({});
 
       const result = await service.addToWatchlist(
@@ -54,18 +52,25 @@ describe("WatchlistService", () => {
       expect(result.added_at).toBeTruthy();
       expect(result.title).toBe("Fight Club");
       expect(result.genres).toEqual(["Drama", "Thriller"]);
-      expect(mockSend).toHaveBeenCalledTimes(5);
+      expect(mockSend).toHaveBeenCalledTimes(4);
 
-      const putCmd = mockSend.mock.calls[4][0];
+      const putCmd = mockSend.mock.calls[3][0];
       expect(putCmd.input.TableName).toBe("test-watchlist");
       expect(putCmd.input.Item.tmdb_movie_id).toBe(550);
+      expect(putCmd.input.ConditionExpression).toBe("attribute_not_exists(group_id)");
     });
 
     it("rejects duplicate with ConflictError", async () => {
-      // isOnWatchlist — GetCommand — found
-      mockSend.mockResolvedValueOnce({
-        Item: { group_id: "g-1", tmdb_movie_id: 550 },
-      });
+      // Check direct watched — not found
+      mockSend.mockResolvedValueOnce({ Item: undefined });
+      // Check pick watched — no watched picks
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // getWatchlistCount — count 0
+      mockSend.mockResolvedValueOnce({ Count: 0 });
+      // Conditional PutCommand — ConditionalCheckFailedException (duplicate)
+      const conditionError = new Error("Conditional check failed");
+      (conditionError as any).name = "ConditionalCheckFailedException";
+      mockSend.mockRejectedValueOnce(conditionError);
 
       await expect(
         service.addToWatchlist("g-1", 550, "user-123", metadata),
@@ -73,8 +78,6 @@ describe("WatchlistService", () => {
     });
 
     it("rejects when watchlist is full (50 movies)", async () => {
-      // isOnWatchlist — not found
-      mockSend.mockResolvedValueOnce({ Item: undefined });
       // Check direct watched — not found
       mockSend.mockResolvedValueOnce({ Item: undefined });
       // Check pick watched — no watched picks
@@ -88,8 +91,6 @@ describe("WatchlistService", () => {
     });
 
     it("rejects when movie is already watched (direct)", async () => {
-      // isOnWatchlist — not found
-      mockSend.mockResolvedValueOnce({ Item: undefined });
       // Check direct watched — found
       mockSend.mockResolvedValueOnce({
         Item: { group_id: "g-1", tmdb_movie_id: 550 },
@@ -101,8 +102,6 @@ describe("WatchlistService", () => {
     });
 
     it("rejects when movie is already watched (via pick)", async () => {
-      // isOnWatchlist — not found
-      mockSend.mockResolvedValueOnce({ Item: undefined });
       // Check direct watched — not found
       mockSend.mockResolvedValueOnce({ Item: undefined });
       // Check pick watched — found watched pick
