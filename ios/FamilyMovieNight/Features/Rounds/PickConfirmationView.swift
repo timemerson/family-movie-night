@@ -4,6 +4,7 @@ struct PickConfirmationView: View {
     let pick: RoundPick
     let roundId: String
     let groupId: String
+    let isCreator: Bool
     let apiClient: APIClient?
     @Environment(\.dismiss) private var dismiss
     @State private var markingWatched = false
@@ -85,7 +86,7 @@ struct PickConfirmationView: View {
             ratingViewModel.configure(
                 roundId: roundId,
                 activeMemberId: apiClient.currentUserId,
-                isCreator: true,
+                isCreator: isCreator,
                 activeProfileName: nil,
                 movieTitle: pick.title,
                 movieYear: 0,

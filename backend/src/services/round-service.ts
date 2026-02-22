@@ -478,9 +478,12 @@ export class RoundService {
     }
 
     // Only creator can close ratings
-    if (targetStatus === "rated" && (member as any).role !== "creator") {
+    if (targetStatus === "rated" && member.role !== "creator") {
       throw new ForbiddenError("Only the group creator can close ratings");
     }
+
+    // Determine the expected source status for the atomic condition
+    const expectedStatus = targetStatus === "watched" ? "selected" : "watched";
 
     const now = new Date().toISOString();
     const updateExpr =
@@ -488,18 +491,32 @@ export class RoundService {
         ? "SET #s = :s, watched_at = :ts"
         : "SET #s = :s, rated_at = :ts";
 
-    const result = await this.docClient.send(
-      new UpdateCommand({
-        TableName: this.roundsTable,
-        Key: { round_id: roundId },
-        UpdateExpression: updateExpr,
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: { ":s": targetStatus, ":ts": now },
-        ReturnValues: "ALL_NEW",
-      }),
-    );
+    try {
+      const result = await this.docClient.send(
+        new UpdateCommand({
+          TableName: this.roundsTable,
+          Key: { round_id: roundId },
+          UpdateExpression: updateExpr,
+          ConditionExpression: "#s = :expected",
+          ExpressionAttributeNames: { "#s": "status" },
+          ExpressionAttributeValues: {
+            ":s": targetStatus,
+            ":ts": now,
+            ":expected": expectedStatus,
+          },
+          ReturnValues: "ALL_NEW",
+        }),
+      );
 
-    return result.Attributes as Round;
+      return result.Attributes as Round;
+    } catch (err: any) {
+      if (err.name === "ConditionalCheckFailedException") {
+        throw new ConflictError(
+          `Round status has already changed; cannot transition to '${targetStatus}'`,
+        );
+      }
+      throw err;
+    }
   }
 
   /** Get round without joins (for internal checks) */

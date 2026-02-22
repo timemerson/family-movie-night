@@ -26,6 +26,7 @@ export class RatingService {
   constructor(
     private readonly docClient: DynamoDBDocumentClient,
     private readonly ratingsTable: string,
+    private readonly usersTable: string,
     private readonly roundService: RoundService,
     private readonly groupService: GroupService,
   ) {}
@@ -131,7 +132,7 @@ export class RatingService {
       try {
         const result = await this.docClient.send(
           new GetCommand({
-            TableName: process.env.USERS_TABLE ?? "",
+            TableName: this.usersTable,
             Key: { user_id: userId },
           }),
         );

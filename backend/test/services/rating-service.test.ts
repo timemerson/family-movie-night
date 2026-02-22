@@ -29,11 +29,10 @@ describe("RatingService", () => {
     mockSend = client.send;
     mockRoundService = createMockRoundService();
     mockGroupService = createMockGroupService();
-    // Set USERS_TABLE env var for getUserDetails
-    process.env.USERS_TABLE = "test-users";
     service = new RatingService(
       client as any,
       "test-ratings",
+      "test-users",
       mockRoundService as any,
       mockGroupService as any,
     );

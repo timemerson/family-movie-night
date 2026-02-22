@@ -71,6 +71,7 @@ function getServices() {
   const ratingService = new RatingService(
     docClient,
     tableName("RATINGS"),
+    tableName("USERS"),
     roundService,
     groupService,
   );
