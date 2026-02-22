@@ -4,6 +4,7 @@ import { GroupService } from "../services/group-service.js";
 import { VoteService } from "../services/vote-service.js";
 import { RoundService } from "../services/round-service.js";
 import { SubmitVoteSchema } from "../models/vote.js";
+import { normalizeStatus } from "../models/round.js";
 import { getDocClient, tableName } from "../lib/dynamo.js";
 import { ValidationError } from "../lib/errors.js";
 
@@ -89,7 +90,7 @@ votes.get("/rounds/:round_id/results", async (c) => {
 
   return c.json({
     round_id: roundId,
-    status: round.status,
+    status: normalizeStatus(round.status),
     results,
     vote_progress: progress,
   });

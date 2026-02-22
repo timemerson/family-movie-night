@@ -6,14 +6,29 @@ import { SuggestionSchema } from "./suggestion.js";
 export const RoundSchema = z.object({
   round_id: z.string(),
   group_id: z.string(),
-  status: z.enum(["voting", "closed", "picked", "discarded"]),
+  status: z.enum(["voting", "closed", "selected", "watched", "rated", "discarded"]),
   started_by: z.string(),
   created_at: z.string(),
   closed_at: z.string().nullable().optional(),
   pick_id: z.string().nullable().optional(),
+  attendees: z.array(z.string()).nullable().optional(),
 });
 
 export type Round = z.infer<typeof RoundSchema>;
+
+// --- Status Normalization ---
+
+/**
+ * Maps legacy status values to current status values at read-time.
+ * This allows existing DynamoDB records with old status strings
+ * (e.g. "picked") to be read correctly without a data migration.
+ */
+export function normalizeStatus(status: string): Round["status"] {
+  const statusMap: Record<string, Round["status"]> = {
+    picked: "selected",
+  };
+  return statusMap[status] ?? (status as Round["status"]);
+}
 
 // --- Create Round Request ---
 

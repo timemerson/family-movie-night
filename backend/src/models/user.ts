@@ -6,6 +6,8 @@ export const UserSchema = z.object({
   display_name: z.string(),
   avatar_key: z.string().default("avatar_bear"),
   created_at: z.string(),
+  is_managed: z.boolean().optional().default(false),
+  parent_user_id: z.string().nullable().optional().default(null),
   notification_prefs: z
     .object({
       vote_nudge: z.boolean().default(true),

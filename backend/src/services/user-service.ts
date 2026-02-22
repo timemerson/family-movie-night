@@ -37,6 +37,8 @@ export class UserService {
       display_name: displayName ?? email.split("@")[0],
       avatar_key: "avatar_bear",
       created_at: now,
+      is_managed: false,
+      parent_user_id: null,
       notification_prefs: {
         vote_nudge: true,
         pick_announce: true,

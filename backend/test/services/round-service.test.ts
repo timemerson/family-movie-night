@@ -498,12 +498,12 @@ describe("RoundService", () => {
       );
     });
 
-    it("throws ConflictError when round is already picked", async () => {
+    it("throws ConflictError when round is already selected", async () => {
       mockSend.mockResolvedValueOnce({
         Item: {
           round_id: "r-1",
           group_id: "g-1",
-          status: "picked",
+          status: "selected",
           started_by: "user-1",
           created_at: "2026-02-21T20:00:00Z",
         },
@@ -514,8 +514,78 @@ describe("RoundService", () => {
       });
 
       await expect(service.closeRound("r-1", "user-1")).rejects.toThrow(
-        "Round is in 'picked' status, cannot close",
+        "Round is in 'selected' status, cannot close",
       );
+    });
+  });
+
+  describe("status normalization", () => {
+    it("normalizes legacy 'picked' to 'selected' in getRoundBasic", async () => {
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "picked",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+
+      const result = await service.getRoundBasic("r-1");
+
+      expect(result).not.toBeNull();
+      expect(result!.status).toBe("selected");
+    });
+
+    it("normalizes legacy 'picked' to 'selected' in getRound response", async () => {
+      // GetCommand for round with legacy 'picked' status
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "picked",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+          pick_id: "p-1",
+        },
+      });
+      // QueryCommand for suggestions
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // QueryCommand for votes
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // GetCommand for pick
+      mockSend.mockResolvedValueOnce({ Item: undefined });
+
+      const result = await service.getRound("r-1");
+
+      expect(result.status).toBe("selected");
+    });
+
+    it("normalizes legacy 'picked' to 'selected' in getActiveRound", async () => {
+      // All rounds have legacy 'picked' status — none should be active
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          { round_id: "r-1", group_id: "g-1", status: "picked", created_at: "2026-02-20T20:00:00Z" },
+        ],
+      });
+
+      const result = await service.getActiveRound("g-1");
+
+      expect(result).toBeNull();
+    });
+
+    it("normalizes legacy 'picked' to 'selected' in getRoundsForGroup", async () => {
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          { round_id: "r-1", group_id: "g-1", status: "picked", created_at: "2026-02-20T20:00:00Z" },
+          { round_id: "r-2", group_id: "g-1", status: "voting", created_at: "2026-02-21T20:00:00Z" },
+        ],
+      });
+
+      const result = await service.getRoundsForGroup("g-1");
+
+      expect(result[0].status).toBe("selected");
+      expect(result[1].status).toBe("voting");
     });
   });
 
@@ -523,7 +593,7 @@ describe("RoundService", () => {
     it("returns active voting round", async () => {
       mockSend.mockResolvedValueOnce({
         Items: [
-          { round_id: "r-2", group_id: "g-1", status: "picked", created_at: "2026-02-21T20:00:00Z" },
+          { round_id: "r-2", group_id: "g-1", status: "selected", created_at: "2026-02-21T20:00:00Z" },
           { round_id: "r-3", group_id: "g-1", status: "voting", created_at: "2026-02-22T20:00:00Z" },
         ],
       });
@@ -538,7 +608,7 @@ describe("RoundService", () => {
     it("returns null when no active round", async () => {
       mockSend.mockResolvedValueOnce({
         Items: [
-          { round_id: "r-1", group_id: "g-1", status: "picked", created_at: "2026-02-20T20:00:00Z" },
+          { round_id: "r-1", group_id: "g-1", status: "selected", created_at: "2026-02-20T20:00:00Z" },
         ],
       });
 
@@ -629,7 +699,7 @@ describe("RoundService", () => {
 
       // Verify round status updated to 'picked' with atomic condition
       const updateCmd = mockSend.mock.calls[2][0];
-      expect(updateCmd.input.ExpressionAttributeValues[":s"]).toBe("picked");
+      expect(updateCmd.input.ExpressionAttributeValues[":s"]).toBe("selected");
       expect(updateCmd.input.ExpressionAttributeValues[":pid"]).toBe("p-1");
       expect(updateCmd.input.ConditionExpression).toBe("attribute_not_exists(pick_id)");
     });
@@ -678,12 +748,12 @@ describe("RoundService", () => {
       ).rejects.toThrow("Only the group creator can pick a movie");
     });
 
-    it("throws ConflictError when round is already picked", async () => {
+    it("throws ConflictError when round is already selected", async () => {
       mockSend.mockResolvedValueOnce({
         Item: {
           round_id: "r-1",
           group_id: "g-1",
-          status: "picked",
+          status: "selected",
           started_by: "user-1",
           created_at: "2026-02-21T20:00:00Z",
         },
@@ -695,7 +765,7 @@ describe("RoundService", () => {
 
       await expect(
         serviceWithPick.pickMovie("r-1", 550, "user-1"),
-      ).rejects.toThrow("Round is in 'picked' status, cannot pick");
+      ).rejects.toThrow("Round is in 'selected' status, cannot pick");
     });
 
     it("throws ValidationError when movie not in round", async () => {
