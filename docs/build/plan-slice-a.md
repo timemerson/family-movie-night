@@ -268,7 +268,7 @@ Return the combined watched list from both sources. (US-35)
       "source": "picked",
       "marked_by": "uuid",
       "pick_id": "uuid",
-      "avg_rating": 4.2
+      "ratings_summary": { "loved": 2, "liked": 1, "did_not_like": 0 }
     },
     {
       "tmdb_movie_id": 680,

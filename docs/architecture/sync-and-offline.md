@@ -22,9 +22,10 @@ The iOS app uses **in-memory caching only** — no Core Data, no SQLite, no on-d
 | Data | Cache Location | Lifetime | Purpose |
 |---|---|---|---|
 | Auth tokens | iOS Keychain | Until expiry (access: 1h, refresh: 30d) | Persistent auth across app launches |
+| Active profile state | In-memory | Until profile switch or sign-out | `ProfileSessionManager` holds the active member (authenticated user or managed member) |
 | Current user profile | In-memory | Until app backgrounded or API refresh | Avoid re-fetching on every screen |
-| Group details + members | In-memory | Until app backgrounded or manual refresh | Display group home without a network call on back-navigation |
-| Current suggestion round | In-memory | Until round closes or app backgrounded | Display voting screen without re-fetch |
+| Group details + members | In-memory | Until app backgrounded or manual refresh | Display group home without a network call on back-navigation; includes managed member list for profile switcher |
+| Current suggestion round | In-memory | Until round closes or app backgrounded | Display voting screen without re-fetch; includes attendees list |
 | Movie metadata (detail view) | In-memory + URL cache | Standard HTTP cache (images via URLCache) | Avoid re-fetching movie details during a session |
 | TMDB poster images | URLCache (HTTP) | Standard HTTP cache headers | iOS image loading pipeline handles this |
 
@@ -39,12 +40,13 @@ The iOS app uses **in-memory caching only** — no Core Data, no SQLite, no on-d
 
 With an online-only app and small group sizes, conflicts are rare. The two operations that could conflict are handled as follows:
 
-### Votes: Last-Write-Wins (Per User)
+### Votes: Last-Write-Wins (Per Member)
 
-- Each user can vote once per movie per round (US-14).
-- If a user changes their vote, the new vote **overwrites** the previous one.
-- DynamoDB uses `PutItem` with the composite key `(round_id, tmdb_movie_id, user_id)` — this is an idempotent upsert.
-- There is no real conflict: two different users voting on the same movie are writing to different items (different `user_id`). The same user voting twice just overwrites their own vote.
+- Each member can vote once per movie per round (US-14).
+- If a member changes their vote, the new vote **overwrites** the previous one.
+- DynamoDB uses `PutItem` with the composite key `(round_id, tmdb_movie_id, member_id)` — this is an idempotent upsert.
+- There is no real conflict: two different members voting on the same movie are writing to different items (different `member_id`). The same member voting twice just overwrites their own vote.
+- When the authenticated user acts as a managed member (via `X-Acting-As-Member`), the vote is attributed to the managed member's ID, not the authenticated user's ID.
 
 ### Picks: Conditional Write (Exactly-Once)
 
@@ -60,11 +62,18 @@ With an online-only app and small group sizes, conflicts are rare. The two opera
 ### Round Creation: One Active Round Per Group
 
 - Only one voting round can be active per group at a time (Flow 6 assumption).
+- Any household member can create a round (not just the creator).
 - Creating a new round checks for an active round:
   ```
   Query Rounds table GSI: group_id = X AND status = "voting"
   ```
 - If an active round exists, the API returns `409 Conflict` with the active round ID. The iOS app can prompt the user to close the existing round first.
+
+### Profile Switching
+
+- Profile switching is a client-side operation only — no server round-trip.
+- `ProfileSessionManager` updates the `activeProfile` in-memory and the `APIClient` attaches the `X-Acting-As-Member` header on subsequent requests.
+- If the managed member list changes (e.g., another device adds a managed member), the change is visible after the next group refresh.
 
 ## Offline UX
 

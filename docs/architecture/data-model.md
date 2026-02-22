@@ -12,20 +12,21 @@ All tables use **on-demand** (pay-per-request) capacity mode. At v1 traffic leve
 
 ### 1. Users
 
-Stores user profiles. Source of truth for application-level user data (Cognito handles auth identity).
+Stores user profiles. Source of truth for application-level user data. Includes both Independent members (backed by Cognito) and Managed members (no Cognito account).
 
 | Attribute | Type | Key | Notes |
 |---|---|---|---|
-| `user_id` | S | **PK** | Cognito `sub` (UUID) |
-| `email` | S | | |
+| `user_id` | S | **PK** | Cognito `sub` (UUID) for independent members; `managed_<uuid>` for managed members |
+| `email` | S | | Null for managed members |
 | `display_name` | S | | Max 30 chars |
 | `avatar_key` | S | | Predefined avatar reference |
-| `parent_user_id` | S | | Set for child profiles; null for regular users |
-| `is_child_profile` | BOOL | | |
+| `is_managed` | BOOL | | `true` for managed members, `false` for independent |
+| `parent_user_id` | S | | Set for managed members; the Cognito `user_id` of the controlling user |
+| `content_rating_ceiling` | S | | Max content rating for this member. Managed members default to `PG`. |
 | `created_at` | S | | ISO 8601 |
 | `last_active_at` | S | | ISO 8601 |
-| `notification_prefs` | M | | `{ vote_nudge, pick_announce, new_round }` |
-| `device_token` | S | | APNs push token; updated on app launch |
+| `notification_prefs` | M | | `{ vote_nudge, pick_announce, new_round }` — null for managed members |
+| `device_token` | S | | APNs push token; null for managed members |
 
 **GSI: `email-index`**
 - PK: `email`
@@ -33,7 +34,7 @@ Stores user profiles. Source of truth for application-level user data (Cognito h
 
 **GSI: `parent-index`**
 - PK: `parent_user_id`
-- Use: List child profiles for a parent (US-25).
+- Use: List managed members for a parent user.
 
 ---
 
@@ -60,10 +61,10 @@ Join table between Users and Groups. Supports "get all members of a group" and "
 | Attribute | Type | Key | Notes |
 |---|---|---|---|
 | `group_id` | S | **PK** | |
-| `user_id` | S | **SK** | |
+| `user_id` | S | **SK** | `user_id` for independent; `managed_<uuid>` for managed members |
 | `role` | S | | `creator` or `member` |
+| `member_type` | S | | `independent` or `managed` |
 | `joined_at` | S | | ISO 8601 |
-| `is_child_profile` | BOOL | | Denormalized from Users for display |
 
 **GSI: `user-groups-index`**
 - PK: `user_id`
@@ -73,20 +74,21 @@ Join table between Users and Groups. Supports "get all members of a group" and "
 
 ### 4. Preferences
 
-Per-user, per-group preference settings.
+Per-member, per-group preference settings. The SK is the member's `user_id` — for managed members this is their `managed_<uuid>` ID.
 
 | Attribute | Type | Key | Notes |
 |---|---|---|---|
 | `group_id` | S | **PK** | |
-| `user_id` | S | **SK** | |
+| `user_id` | S | **SK** | `user_id` or `managed_<uuid>` (the member's ID) |
 | `genre_likes` | L | | List of TMDB genre ID strings |
 | `genre_dislikes` | L | | List of TMDB genre ID strings |
 | `max_content_rating` | S | | `G`, `PG`, `PG-13`, or `R` |
 | `updated_at` | S | | ISO 8601 |
 
 **Access patterns:**
-- **Get one user's prefs:** `PK=group_id, SK=user_id`
+- **Get one member's prefs:** `PK=group_id, SK=member_id`
 - **Get all prefs for a group:** `PK=group_id` (Query, no SK condition)
+- **Get prefs for attendees only:** `PK=group_id`, then filter client-side by attendee list
 
 No GSIs needed.
 
@@ -120,24 +122,35 @@ Group invite links with expiry and status tracking.
 
 ---
 
-### 6. Rounds
+### 6. Rounds (Sessions)
 
-Suggestion/voting rounds.
+Movie night sessions with full lifecycle. Any household member can create a session.
 
 | Attribute | Type | Key | Notes |
 |---|---|---|---|
 | `round_id` | S | **PK** | UUID |
 | `group_id` | S | | |
-| `started_by` | S | | `user_id` |
-| `status` | S | | `voting`, `closed`, `picked`, `discarded` |
+| `started_by` | S | | `member_id` (acting member who created the session) |
+| `status` | S | | `draft`, `voting`, `selected`, `watched`, `rated`, `expired` |
+| `attendees` | L | | List of `member_id` strings. Null = all members (backward compat). |
 | `created_at` | S | | ISO 8601 |
-| `closed_at` | S | | ISO 8601 (nullable) |
+| `voting_started_at` | S | | ISO 8601 (nullable; set when draft → voting) |
+| `selected_at` | S | | ISO 8601 (nullable; set when pick locked in) |
+| `watched_at` | S | | ISO 8601 (nullable; set when marked watched) |
+| `rated_at` | S | | ISO 8601 (nullable; set when all attendees rated) |
 | `relaxed_constraints` | L | | List of strings describing relaxed filters |
+
+**Status lifecycle:**
+```
+draft → voting → selected → watched → rated
+                                    ↘ expired (post-v1 automation)
+```
+Legacy status values are mapped at read-time: `picked` → `selected`, `closed` → `voting` (round was closed but not yet picked), `discarded` → `expired`.
 
 **GSI: `group-rounds-index`**
 - PK: `group_id`
 - SK: `created_at`
-- Use: List rounds for a group (history). Also used to check for active rounds (`status = voting`).
+- Use: List rounds for a group (session history). Also used to check for active rounds (`status = voting`).
 
 ---
 
@@ -165,22 +178,23 @@ No GSIs needed.
 
 ### 8. Votes
 
-Individual member votes on suggestions.
+Individual member votes on suggestions. The vote is attributed to the acting member (the authenticated user's own ID, or a managed member's ID if acting on their behalf).
 
 | Attribute | Type | Key | Notes |
 |---|---|---|---|
 | `round_id` | S | **PK** | |
-| `vote_key` | S | **SK** | `{tmdb_movie_id}#{user_id}` — composite sort key |
+| `vote_key` | S | **SK** | `{tmdb_movie_id}#{member_id}` — composite sort key |
 | `tmdb_movie_id` | N | | For filtering/projection |
-| `user_id` | S | | |
+| `member_id` | S | | Acting member (`user_id` or `managed_<uuid>`) |
 | `vote` | S | | `up` or `down` |
 | `voted_at` | S | | ISO 8601 |
 
 **Access patterns:**
 - **Get all votes for a round:** `PK=round_id` (Query)
-- **Get/overwrite a specific vote:** `PK=round_id, SK={movie}#{user}` (PutItem — idempotent upsert)
+- **Get/overwrite a specific vote:** `PK=round_id, SK={movie}#{member}` (PutItem — idempotent upsert)
+- **Vote progress:** Query `PK=round_id`, count distinct `member_id` values, compare against `round.attendees.length`
 
-The composite SK ensures one vote per user per movie per round. Re-voting is a simple `PutItem` overwrite.
+The composite SK ensures one vote per member per movie per round. Re-voting is a simple `PutItem` overwrite.
 
 No GSIs needed.
 
@@ -198,7 +212,7 @@ The final movie choice for a round.
 | `tmdb_movie_id` | N | | |
 | `title` | S | | Denormalized |
 | `poster_path` | S | | Denormalized |
-| `picked_by` | S | | `user_id` of the group creator who confirmed |
+| `picked_by` | S | | `member_id` of the member who confirmed the pick |
 | `picked_at` | S | | ISO 8601 |
 | `watched` | BOOL | | Default: false |
 | `watched_at` | S | | ISO 8601 (nullable) |
@@ -216,18 +230,20 @@ The final movie choice for a round.
 
 ### 10. Ratings
 
-Post-watch ratings by individual members.
+Post-watch ratings by individual attending members. Uses a 3-point scale: Loved / Liked / Did Not Like.
 
 | Attribute | Type | Key | Notes |
 |---|---|---|---|
-| `pick_id` | S | **PK** | |
-| `user_id` | S | **SK** | |
-| `stars` | N | | 1–5 |
+| `round_id` | S | **PK** | The session this rating belongs to |
+| `member_id` | S | **SK** | Acting member (`user_id` or `managed_<uuid>`) |
+| `rating` | S | | `loved`, `liked`, or `did_not_like` |
 | `rated_at` | S | | ISO 8601 |
 
 **Access patterns:**
-- **Get all ratings for a pick:** `PK=pick_id` (Query)
-- **Get/overwrite a user's rating:** `PK=pick_id, SK=user_id` (PutItem)
+- **Get all ratings for a session:** `PK=round_id` (Query)
+- **Get/set one rating:** `PK=round_id, SK=member_id` (PutItem — upsert)
+
+When all attending members have submitted a rating, the round auto-transitions to `rated` status.
 
 No GSIs needed.
 
@@ -259,24 +275,24 @@ No GSIs needed.
 |---|---|---|---|
 | Get user by ID | Users | PK = user_id | — |
 | Get user by email | Users | PK = email | email-index |
-| Get child profiles for parent | Users | PK = parent_user_id | parent-index |
+| Get managed members for parent | Users | PK = parent_user_id | parent-index |
 | Get group by ID | Groups | PK = group_id | — |
 | Get members of a group | GroupMemberships | PK = group_id | — |
 | Get group for a user | GroupMemberships | PK = user_id | user-groups-index |
-| Get user prefs in a group | Preferences | PK = group_id, SK = user_id | — |
+| Get member prefs in a group | Preferences | PK = group_id, SK = member_id | — |
 | Get all prefs for a group | Preferences | PK = group_id | — |
 | Get invite by token | Invites | PK = invite_token | token-index |
 | List invites for a group | Invites | PK = group_id | group-invites-index |
-| Get round by ID | Rounds | PK = round_id | — |
-| List rounds for a group | Rounds | PK = group_id | group-rounds-index |
+| Get round/session by ID | Rounds | PK = round_id | — |
+| List sessions for a group | Rounds | PK = group_id | group-rounds-index |
 | Get suggestions for a round | Suggestions | PK = round_id | — |
 | Get all votes for a round | Votes | PK = round_id | — |
-| Get/set one vote | Votes | PK = round_id, SK = movie#user | — |
+| Get/set one vote | Votes | PK = round_id, SK = movie#member | — |
 | Get pick by ID | Picks | PK = pick_id | — |
 | Check pick exists for round | Picks | PK = round_id | round-pick-index |
 | Watch history for a group | Picks | PK = group_id | group-picks-index |
-| Get ratings for a pick | Ratings | PK = pick_id | — |
-| Get/set one rating | Ratings | PK = pick_id, SK = user_id | — |
+| Get ratings for a session | Ratings | PK = round_id | — |
+| Get/set one rating | Ratings | PK = round_id, SK = member_id | — |
 | Cache lookup | TmdbCache | PK = cache_key | — |
 
 **Total: 11 tables, 8 GSIs, 2 TTL-enabled tables.**
@@ -286,14 +302,15 @@ No GSIs needed.
 ## Entity Relationship Summary
 
 ```
-Users ──1:N──▶ GroupMemberships ◀──N:1── Groups
+Users (Independent + Managed) ──1:N──▶ GroupMemberships ◀──N:1── Groups
 Users ──1:N──▶ Preferences ◀──N:1── Groups
-Users ──1:N──▶ Votes
-Users ──1:N──▶ Ratings
-Users ──1:N──▶ Users (parent → child profiles)
+Users ──1:N──▶ Votes (as member_id)
+Users ──1:N──▶ Ratings (as member_id)
+Users ──1:N──▶ Users (parent → managed members)
 
 Groups ──1:N──▶ Invites
-Groups ──1:N──▶ Rounds ──1:N──▶ Suggestions
+Groups ──1:N──▶ Rounds (Sessions) ──1:N──▶ Suggestions
                 Rounds ──1:N──▶ Votes
-                Rounds ──1:1──▶ Picks ──1:N──▶ Ratings
+                Rounds ──1:1──▶ Picks
+                Rounds ──1:N──▶ Ratings
 ```

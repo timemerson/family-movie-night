@@ -40,23 +40,26 @@ backend/
 │   ├── index.ts                    # Lambda entry point (Hono app)
 │   ├── routes/
 │   │   ├── users.ts
-│   │   ├── groups.ts
+│   │   ├── groups.ts               # Includes managed member CRUD
 │   │   ├── invites.ts
-│   │   ├── preferences.ts
-│   │   ├── rounds.ts
+│   │   ├── preferences.ts          # Supports ?member_id= for managed members
+│   │   ├── rounds.ts               # Session lifecycle, attendee selection
 │   │   ├── votes.ts
 │   │   ├── picks.ts
-│   │   ├── ratings.ts
+│   │   ├── ratings.ts              # 3-point scale (loved/liked/did_not_like)
 │   │   ├── movies.ts
-│   │   └── account.ts
+│   │   └── sessions.ts             # Session history endpoint
 │   ├── services/
 │   │   ├── tmdb.ts                 # TMDB API client + caching
 │   │   ├── recommendations.ts      # Suggestion algorithm (ADR-0003)
 │   │   ├── notifications.ts        # SNS push notification helper
-│   │   └── auth.ts                 # JIT user provisioning
+│   │   ├── auth.ts                 # JIT user provisioning
+│   │   ├── member-service.ts       # Managed member CRUD
+│   │   └── rating-service.ts       # Post-watch ratings + auto-transition
 │   ├── middleware/
 │   │   ├── group-member.ts         # Verify user is a group member
-│   │   └── group-creator.ts        # Verify user is the group creator
+│   │   ├── group-creator.ts        # Verify user is the group creator
+│   │   └── acting-as.ts            # Resolve X-Acting-As-Member header
 │   ├── lib/
 │   │   ├── dynamo.ts               # DynamoDB client + table helpers
 │   │   └── errors.ts               # HTTP error classes
@@ -121,8 +124,16 @@ The Lambda enforces authorization rules in middleware:
 | Rule | Check | Enforcement |
 |---|---|---|
 | User is a group member | Query GroupMemberships table | `group-member` middleware on all `/groups/{id}/*` routes |
-| User is the group creator | Check `role = creator` in membership | `group-creator` middleware on admin-only routes |
+| User is the group creator | Check `role = creator` in membership | `group-creator` middleware on admin-only routes (pick confirmation, group settings) |
 | Round belongs to user's group | Look up round, verify group membership | Route handler |
+| Acting-as managed member | Validate `X-Acting-As-Member` header: member `is_managed`, `parent_user_id` matches JWT caller, member in same group | `acting-as` middleware; sets `actingMemberId` in context |
+| Member is session attendee | Check `member_id` is in `round.attendees` | Vote/rating route handlers |
+
+**Key authorization notes:**
+- Any household member can start a session (round creation is not creator-only).
+- Pick confirmation remains creator-only.
+- Managed member actions (vote, rate, preferences) require the authenticated user to be the managed member's parent (`parent_user_id` match).
+- Cross-household leakage prevention: the `acting-as` middleware validates both parent ownership AND group membership.
 
 ### IAM: Least Privilege
 
@@ -209,15 +220,33 @@ All request bodies are validated with **Zod** schemas before any business logic 
 - Implement `POST /rounds/{id}/pick` with conditional write
 - Implement `PATCH /picks/{id}` (mark watched) and `GET /groups/{id}/picks` (history)
 
-### Phase 7: Ratings & Notifications
-- Implement `POST /picks/{id}/ratings`
+### Phase 7: Ratings & Session Lifecycle
+- Implement `POST /rounds/{id}/ratings` with 3-point scale (loved / liked / did_not_like)
+- Implement `GET /rounds/{id}/ratings`
+- Implement session status transitions (`selected → watched → rated`)
+- Auto-transition to `rated` when all attendees have rated
+- Implement `GET /groups/{id}/sessions` (session history)
+- Add `normalizeStatus` adapter for legacy round status values
+
+### Phase 8: Managed Members & Profile Switching
+- Extend User schema with `is_managed`, `parent_user_id` fields
+- Implement `POST /groups/{id}/members/managed` (create managed member)
+- Implement `DELETE /groups/{id}/members/{member_id}` (remove member)
+- Implement `acting-as` middleware for `X-Acting-As-Member` header validation
+- Update vote, rating, and preference services to use `actingMemberId ?? userId`
+- Add preference `?member_id=` query param support for managed members
+
+### Phase 9: Attendee Selection
+- Add `attendees` field to Round schema and create-round request
+- Update vote progress to use attendees as denominator
+- Update suggestion algorithm to scope preferences to attendees only
+- Remove `requireCreator` check on round creation (anyone can start)
+
+### Phase 10: Notifications & Polish
 - Create `NotificationsStack` with SNS platform application
 - Implement push notification sending for: round started, pick announced, vote nudge
 - Register device tokens via `PATCH /users/me`
-
-### Phase 8: Polish & Hardening
 - Implement `DELETE /users/me` (account deletion with cascading cleanup)
-- Implement `POST /account/child-profiles`
 - Implement `GET /movies/{id}` (detailed movie info endpoint)
 - Create `MonitoringStack` (CloudWatch dashboard, error alarms)
 - Add integration tests

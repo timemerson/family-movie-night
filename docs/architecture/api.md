@@ -9,7 +9,16 @@ All endpoints are served by a single Lambda function with a [Hono](https://hono.
 ```
 Authorization: Bearer <cognito-access-token>
 Content-Type: application/json
+X-Acting-As-Member: <member_id>   (optional; for managed member delegation)
 ```
+
+**Acting-As-Member Header:**
+When an authenticated user acts on behalf of a managed member, include the `X-Acting-As-Member` header with the managed member's `member_id` (`managed_<uuid>`). The backend validates that:
+1. The member exists and has `is_managed: true`.
+2. The member's `parent_user_id` matches the JWT caller's `user_id`.
+3. The member belongs to the same group as the request target.
+
+If the header is absent, the authenticated user acts as themselves.
 
 **Common Error Responses:**
 | Status | Meaning |
@@ -130,6 +139,41 @@ Leave the group. If the creator leaves, the longest-tenured member becomes creat
 
 **Response 204:** No content.
 
+### `POST /groups/{group_id}/members/managed`
+Create a managed member profile within the household. The authenticated user becomes the managed member's parent. (US-25)
+
+**Request:**
+```json
+{
+  "display_name": "Max",
+  "avatar_key": "avatar_dino"
+}
+```
+
+**Response 201:**
+```json
+{
+  "user_id": "managed_<uuid>",
+  "display_name": "Max",
+  "avatar_key": "avatar_dino",
+  "is_managed": true,
+  "parent_user_id": "uuid",
+  "content_rating_ceiling": "PG",
+  "member_type": "managed"
+}
+```
+
+Managed members automatically get `content_rating_ceiling: "PG"` and are added to the group as a `member`.
+
+**COPPA note:** The response includes `child_profile_disclosure: "This profile is managed by you on behalf of a household member. No data is collected directly from this member."`
+
+### `DELETE /groups/{group_id}/members/{member_id}`
+Remove a member from the group. Creator can remove any managed member. Independent members can only remove themselves (use `DELETE /groups/{group_id}/members/me`).
+
+**Response 204:** No content.
+
+**Error 403:** Not authorized to remove this member.
+
 ---
 
 ## Invites
@@ -190,12 +234,15 @@ Accept an invite and join the group. The authenticated user is added as a member
 ## Preferences
 
 ### `GET /groups/{group_id}/preferences`
-Get the current user's preferences for this group. (US-08, US-09)
+Get preferences for the current user (or a managed member) in this group. (US-08, US-09)
+
+**Query params:**
+- `member_id` (optional) — If provided, returns preferences for the specified managed member. The caller must be the managed member's parent.
 
 **Response 200:**
 ```json
 {
-  "user_id": "uuid",
+  "member_id": "uuid",
   "group_id": "uuid",
   "genre_likes": ["28", "35", "16"],
   "genre_dislikes": ["27"],
@@ -205,7 +252,10 @@ Get the current user's preferences for this group. (US-08, US-09)
 ```
 
 ### `PUT /groups/{group_id}/preferences`
-Set or replace the current user's preferences for this group. (US-08, US-09)
+Set or replace preferences for the current user (or a managed member) in this group. (US-08, US-09)
+
+**Query params:**
+- `member_id` (optional) — If provided, sets preferences for the specified managed member. The caller must be the managed member's parent.
 
 **Request:**
 ```json
@@ -228,15 +278,17 @@ Set or replace the current user's preferences for this group. (US-08, US-09)
 ## Rounds
 
 ### `POST /groups/{group_id}/rounds`
-Start a new suggestion round. Runs the recommendation algorithm and creates a voting round with 5–8 suggestions. (US-11, Flow 5+6)
+Start a new session. Any household member can create a session. Runs the recommendation algorithm using attendees' preferences and creates a voting round with 5–8 suggestions. (US-11, Flow 5+6)
 
-**Request (optional):**
+**Request:**
 ```json
 {
+  "attendees": ["uuid-1", "uuid-2", "managed_uuid-3"],
   "exclude_movie_ids": [550, 680]
 }
 ```
-`exclude_movie_ids` is used for "Show Me More" (US-13) — pass the IDs from the previous batch.
+- `attendees` (optional) — Array of member IDs who are participating. Must be a subset of group members. Min 2. Defaults to all group members if omitted.
+- `exclude_movie_ids` is used for "Show Me More" (US-13) — pass the IDs from the previous batch.
 
 **Response 201:**
 ```json
@@ -244,6 +296,8 @@ Start a new suggestion round. Runs the recommendation algorithm and creates a vo
   "round_id": "uuid",
   "group_id": "uuid",
   "status": "voting",
+  "started_by": "uuid",
+  "attendees": ["uuid-1", "uuid-2", "managed_uuid-3"],
   "created_at": "2026-02-14T20:00:00Z",
   "suggestions": [
     {
@@ -267,10 +321,10 @@ Start a new suggestion round. Runs the recommendation algorithm and creates a vo
 ```
 
 **Error 409:** An active round already exists. Response includes the active `round_id`.
-**Error 422:** Fewer than 2 members have set preferences.
+**Error 422:** Fewer than 2 attendees have set preferences.
 
 ### `GET /rounds/{round_id}`
-Get round details including suggestions, vote counts, and status.
+Get round details including suggestions, vote counts, attendees, and status.
 
 **Response 200:**
 ```json
@@ -278,6 +332,8 @@ Get round details including suggestions, vote counts, and status.
   "round_id": "uuid",
   "group_id": "uuid",
   "status": "voting",
+  "started_by": "uuid",
+  "attendees": ["uuid-1", "uuid-2", "managed_uuid-3"],
   "created_at": "2026-02-14T20:00:00Z",
   "suggestions": [
     {
@@ -286,18 +342,21 @@ Get round details including suggestions, vote counts, and status.
       "title": "Fight Club",
       "votes": { "up": 2, "down": 1 },
       "voters": [
-        { "user_id": "uuid", "display_name": "Tim", "vote": "up" },
-        { "user_id": "uuid", "display_name": "Sarah", "vote": "up" },
-        { "user_id": "uuid", "display_name": "Max", "vote": "down" }
+        { "member_id": "uuid-1", "display_name": "Tim", "vote": "up" },
+        { "member_id": "uuid-2", "display_name": "Sarah", "vote": "up" },
+        { "member_id": "managed_uuid-3", "display_name": "Max", "vote": "down" }
       ]
     }
   ],
-  "vote_progress": { "voted": 3, "total": 4 }
+  "vote_progress": { "voted": 3, "total": 3 }
 }
 ```
 
+Status values: `draft`, `voting`, `selected`, `watched`, `rated`, `expired`.
+Vote progress `total` = number of attendees (not all group members).
+
 ### `PATCH /rounds/{round_id}`
-Close a voting round early. Creator only. (US-14, Flow 6 step 3)
+Transition a round through its lifecycle. A single endpoint handles all status transitions with validation. (US-14, US-18, US-19)
 
 **Request:**
 ```json
@@ -306,14 +365,24 @@ Close a voting round early. Creator only. (US-14, Flow 6 step 3)
 }
 ```
 
-**Response 200:** Updated round object.
+**Valid transitions and permissions:**
+
+| From | To | Who | Notes |
+|---|---|---|---|
+| `voting` | `closed` | Creator only | Close voting early |
+| `selected` | `watched` | Any member | Mark movie as watched; sets `watched_at` |
+| `watched` | `rated` | Creator only | Close ratings (when not all attendees have rated) |
+
+The `selected` status is set automatically by `POST /rounds/{round_id}/pick`. The `rated` status is set automatically when all attendees have submitted ratings, but can also be set manually via this endpoint to close ratings early.
+
+**Response 200:** Updated round object with relevant timestamp (`watched_at`, `rated_at`, etc.).
 
 ---
 
 ## Votes
 
 ### `POST /rounds/{round_id}/votes`
-Submit a vote on a movie in the round. Overwrites any previous vote by this user on this movie. (US-14)
+Submit a vote on a movie in the round. Overwrites any previous vote by this member on this movie. Vote is attributed to the active member (the authenticated user, or a managed member if `X-Acting-As-Member` is set). (US-14)
 
 **Request:**
 ```json
@@ -326,7 +395,7 @@ Submit a vote on a movie in the round. Overwrites any previous vote by this user
 **Validation:**
 - `vote` must be `"up"` or `"down"`.
 - Round must have `status: "voting"`.
-- User must be a member of the round's group.
+- Acting member must be an attendee of this round.
 - `tmdb_movie_id` must be in the round's suggestions.
 
 **Response 200:**
@@ -334,7 +403,7 @@ Submit a vote on a movie in the round. Overwrites any previous vote by this user
 {
   "round_id": "uuid",
   "tmdb_movie_id": 550,
-  "user_id": "uuid",
+  "member_id": "uuid",
   "vote": "up",
   "voted_at": "2026-02-14T20:15:00Z"
 }
@@ -356,7 +425,7 @@ Get voting results ranked by net score. (US-15)
       "votes_up": 2,
       "votes_down": 1,
       "voters": [
-        { "user_id": "uuid", "display_name": "Tim", "vote": "up" }
+        { "member_id": "uuid", "display_name": "Tim", "vote": "up" }
       ],
       "rank": 1
     }
@@ -424,7 +493,7 @@ Get the group's pick history (watch history). (US-20)
       "picked_at": "2026-02-14T21:00:00Z",
       "watched": true,
       "watched_at": "2026-02-15T02:00:00Z",
-      "avg_rating": 4.2,
+      "ratings_summary": { "loved": 2, "liked": 1, "did_not_like": 0 },
       "rating_count": 3
     }
   ]
@@ -435,27 +504,48 @@ Get the group's pick history (watch history). (US-20)
 
 ## Ratings
 
-### `POST /picks/{pick_id}/ratings`
-Rate a watched movie. One rating per user per pick; overwrites if called again. (US-19)
+### `POST /rounds/{round_id}/ratings`
+Rate a watched movie for a session. One rating per member per session; overwrites if called again. Rating is attributed to the active member (authenticated user or managed member via `X-Acting-As-Member`). (US-19)
 
 **Request:**
 ```json
 {
-  "stars": 4
+  "rating": "loved"
 }
 ```
 
 **Validation:**
-- `stars` must be 1–5.
-- The pick must be marked as watched.
+- `rating` must be `"loved"`, `"liked"`, or `"did_not_like"`.
+- Round must be in `selected` or `watched` status.
+- Acting member must be an attendee of this round.
 
 **Response 201:**
 ```json
 {
-  "pick_id": "uuid",
-  "user_id": "uuid",
-  "stars": 4,
+  "round_id": "uuid",
+  "member_id": "uuid",
+  "rating": "loved",
   "rated_at": "2026-02-15T10:00:00Z"
+}
+```
+
+The round auto-transitions to `rated` when all attending members have submitted a rating. If some attendees never rate, the creator can manually close ratings via `PATCH /rounds/{round_id}` with `{"status": "rated"}`.
+
+### `GET /rounds/{round_id}/ratings`
+Get all ratings for a session. (US-19)
+
+**Response 200:**
+```json
+{
+  "round_id": "uuid",
+  "ratings": [
+    {
+      "member_id": "uuid",
+      "display_name": "Tim",
+      "rating": "loved",
+      "rated_at": "2026-02-15T10:00:00Z"
+    }
+  ]
 }
 ```
 
@@ -492,33 +582,35 @@ Get full movie details from TMDB (cached). (US-12)
 
 ---
 
-## Account
+## Sessions (History)
 
-### `POST /account/child-profiles`
-Create a child profile under the current user's account. (US-25)
+### `GET /groups/{group_id}/sessions`
+Get paginated list of all sessions (rounds) for the group. (US-20)
 
-**Request:**
+**Query params:**
+- `limit` (optional, default 20) — Number of sessions to return.
+- `cursor` (optional) — Pagination cursor from previous response.
+
+**Response 200:**
 ```json
 {
-  "display_name": "Max",
-  "avatar_key": "avatar_dino",
-  "group_id": "uuid"
+  "sessions": [
+    {
+      "round_id": "uuid",
+      "status": "rated",
+      "created_at": "2026-02-14T20:00:00Z",
+      "attendees": ["uuid-1", "uuid-2"],
+      "pick": {
+        "tmdb_movie_id": 550,
+        "title": "Fight Club",
+        "poster_path": "/..."
+      },
+      "ratings_summary": { "loved": 2, "liked": 1, "did_not_like": 0 }
+    }
+  ],
+  "next_cursor": "..."
 }
 ```
-
-**Response 201:**
-```json
-{
-  "user_id": "uuid (child profile ID)",
-  "display_name": "Max",
-  "avatar_key": "avatar_dino",
-  "is_child_profile": true,
-  "parent_user_id": "uuid",
-  "max_content_rating": "PG"
-}
-```
-
-Child profiles automatically get `max_content_rating: "PG"` and are added to the specified group.
 
 ---
 
@@ -533,22 +625,30 @@ Child profiles automatically get `max_content_rating: "PG"` and are added to the
 | GET | `/groups/{group_id}` | Get group details | JWT + member | — |
 | PATCH | `/groups/{group_id}` | Update group | JWT + creator | US-10 |
 | DELETE | `/groups/{group_id}/members/me` | Leave group | JWT + member | US-22 |
+| POST | `/groups/{group_id}/members/managed` | Create managed member | JWT + member | US-25 |
+| DELETE | `/groups/{group_id}/members/{member_id}` | Remove member | JWT + creator | — |
 | POST | `/groups/{group_id}/invites` | Create invite | JWT + creator | US-05 |
 | GET | `/groups/{group_id}/invites` | List invites | JWT + creator | US-07 |
 | DELETE | `/groups/{group_id}/invites/{invite_id}` | Revoke invite | JWT + creator | US-07 |
 | POST | `/invites/{invite_token}/accept` | Accept invite | JWT | US-05 |
-| GET | `/groups/{group_id}/preferences` | Get my preferences | JWT + member | US-08 |
+| GET | `/groups/{group_id}/preferences` | Get preferences | JWT + member | US-08 |
 | PUT | `/groups/{group_id}/preferences` | Set preferences | JWT + member | US-08, US-09 |
-| POST | `/groups/{group_id}/rounds` | Start round | JWT + member | US-11 |
+| POST | `/groups/{group_id}/rounds` | Start session | JWT + member | US-11 |
+| GET | `/groups/{group_id}/sessions` | Session history | JWT + member | US-20 |
 | GET | `/rounds/{round_id}` | Get round | JWT + member | — |
-| PATCH | `/rounds/{round_id}` | Close round | JWT + creator | US-14 |
+| PATCH | `/rounds/{round_id}` | Transition status | JWT + varies | US-14, US-18, US-19 |
 | POST | `/rounds/{round_id}/votes` | Submit vote | JWT + member | US-14 |
 | GET | `/rounds/{round_id}/results` | Get results | JWT + member | US-15 |
 | POST | `/rounds/{round_id}/pick` | Lock in pick | JWT + creator | US-16 |
 | PATCH | `/picks/{pick_id}` | Mark watched | JWT + member | US-18 |
 | GET | `/groups/{group_id}/picks` | Pick history | JWT + member | US-20 |
-| POST | `/picks/{pick_id}/ratings` | Rate movie | JWT + member | US-19 |
+| POST | `/rounds/{round_id}/ratings` | Rate movie | JWT + member | US-19 |
+| GET | `/rounds/{round_id}/ratings` | Get ratings | JWT + member | US-19 |
 | GET | `/movies/{tmdb_movie_id}` | Movie details | JWT | US-12 |
-| POST | `/account/child-profiles` | Create child profile | JWT | US-25 |
 
-**Total: 24 endpoints** covering all P0 and P1 user stories.
+**Total: 27 endpoints** covering all P0 and P1 user stories.
+
+Notes:
+- `X-Acting-As-Member` header is accepted on all endpoints that attribute actions to a member (votes, ratings, preferences). The backend resolves the acting member from the header or falls back to the authenticated user.
+- `POST /groups/{group_id}/rounds` — any member can start a session (not creator-only).
+- Rating uses 3-point scale (`loved`, `liked`, `did_not_like`) not 1-5 stars.

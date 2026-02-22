@@ -67,30 +67,10 @@ See [task-05-followups.md](task-05-followups.md) for full details on each follow
 
 **Plan:** [plan-slice-a.md](plan-slice-a.md) | **Test matrix:** [../testing/test-matrix-slice-a.md](../testing/test-matrix-slice-a.md)
 
-- [ ] (ready) **A1: Watchlist backend** — CDK table, model, service, routes, tests
-  - User stories: US-26, US-27, US-28, US-34, US-40 (partial)
-  - New files: `models/watchlist.ts`, `services/watchlist-service.ts`, `routes/watchlist.ts`
-  - CDK: watchlistTable + IAM grant
-  - 31 tests (see test matrix SA-001 through SA-031)
-
-- [ ] (blocked on A1) **A2: Direct mark-watched + combined watched list** — CDK table, service, routes, tests
-  - User stories: US-33, US-35, US-36, US-40 (complete)
-  - New files: `models/watched-movie.ts`, `services/watched-service.ts`
-  - CDK: watchedMoviesTable + IAM grant
-  - Cross-list: auto-remove from watchlist when marking watched
-  - Updates `suggestion-service.ts` to use combined watched IDs
-  - 34 tests (see test matrix SA-032 through SA-065)
-
-- [ ] (blocked on A1, A2) **A3: Movie detail endpoint with group context** — route, tests
-  - User stories: US-12, US-32
-  - New files: `routes/movies.ts`
-  - CDK: IAM grants for roundsTable, suggestionsTable, votesTable
-  - 15 tests (see test matrix SA-066 through SA-080)
-
-- [ ] (blocked on A1, A2, A3) **A4: iOS Watchlist + Movie Detail + Mark Watched UI** — SwiftUI views
-  - User stories: US-26, US-27, US-28, US-32, US-33, US-34
-  - New files: WatchlistView, MovieDetailView, viewmodels, models
-  - Updates: APIClient.swift, HomeView, SuggestionsView
+- [x] (done) **A1: Watchlist backend** — CDK table, model, service, routes, tests
+- [x] (done) **A2: Direct mark-watched + combined watched list** — CDK table, service, routes, tests
+- [x] (done) **A3: Movie detail endpoint with group context** — route, tests
+- [x] (done) **A4: iOS Watchlist + Movie Detail + Mark Watched UI** — SwiftUI views
 
 ---
 
@@ -100,32 +80,63 @@ See [task-05-followups.md](task-05-followups.md) for full details on each follow
 
 **Depends on:** Slice A (watchlist integration at round start)
 
-- [ ] (blocked on Slice A) **B1: Round service + create round endpoint** — model, service, routes, tests
-  - User stories: US-11, US-13, US-31, US-41 (partial)
-  - New files: `models/round.ts`, `services/round-service.ts`, `routes/rounds.ts`
-  - CDK: IAM grants for roundsTable, suggestionsTable
-  - Watchlist integration at round start
-  - One-active-round constraint
-  - 36 tests (see test matrix SB-001 through SB-036)
+- [x] (done — PR #17) **B1: Round service + create round endpoint** — model, service, routes, tests
+- [x] (done — PR #17) **B2: Voting service + endpoints** — model, service, routes, tests
+- [x] (done — PR #17) **B3: Pick lock-in + round lifecycle** — service extension, routes, tests
+- [x] (done — PR #18) **B4: iOS voting flow UI** — SwiftUI views
 
-- [ ] (blocked on B1) **B2: Voting service + endpoints** — model, service, routes, tests
-  - User stories: US-14, US-15, US-41
-  - New files: `models/vote.ts`, `services/vote-service.ts`, `routes/votes.ts`
-  - CDK: IAM grant for votesTable
-  - Concurrent vote tests (simultaneous votes)
-  - 36 tests (see test matrix SB-037 through SB-072)
+---
 
-- [ ] (blocked on B1, B2) **B3: Pick lock-in + round lifecycle** — service extension, routes, tests
-  - User stories: US-16, US-18
-  - `POST /rounds/:round_id/pick` with conditional write
-  - Round status lifecycle (voting → closed → picked)
-  - Concurrent double-tap tests
-  - 24 tests (see test matrix SB-073 through SB-096)
+### Slice C — Multi-User Household / Member Model Migration
 
-- [ ] (blocked on B1, B2, B3) **B4: iOS voting flow UI** — SwiftUI views
-  - User stories: US-14, US-15, US-16
-  - New files: VotingView, ResultsView, PickConfirmationView, viewmodels
-  - Updates: APIClient.swift, HomeView, SuggestionsView
+**Plan:** [plan-slice-c-multi-user.md](plan-slice-c-multi-user.md)
+
+**Depends on:** Slice B (round/voting infrastructure)
+
+- [ ] (blocked on Slice B) **C0: Baseline schema alignment** — add member_type, attendees, normalizeStatus adapter
+  - Backend: `models/user.ts`, `models/group.ts`, `models/round.ts`, `services/round-service.ts`
+  - iOS: `Models/Group.swift`, `Models/Round.swift`, `Models/Rating.swift` (new)
+  - All additive optional fields; no behavior change
+
+- [ ] (blocked on C0) **C1: Ratings service** — backend + iOS, entirely additive
+  - Backend: `models/rating.ts` (new), `services/rating-service.ts` (new), `routes/ratings.ts` (new)
+  - iOS: `RatingView.swift` (new), `RatingViewModel.swift` (new)
+  - CDK: grant `ratingsTable` access (table already exists)
+  - 3-point scale: Loved / Liked / Did Not Like
+
+- [ ] (blocked on C0) **C2: Attendee selection backend + anyone-can-start** — model extension, service changes
+  - Backend: `CreateRoundSchema` gains optional `attendees: string[]`
+  - `VoteService.getVoteProgress` uses attendees as denominator
+  - `SuggestionService` scopes preferences to attendees
+  - Remove `requireCreator` check on round creation
+  - iOS: `Models/Round.swift` gains `attendees` field
+
+- [ ] (blocked on C2) **C3: Managed member infrastructure** — backend, largest slice
+  - Backend: `X-Acting-As-Member` header support in auth middleware
+  - `POST /groups/:id/members/managed` — create managed member (synthetic `managed_<uuid>` user_id)
+  - Vote/preference attribution uses `actingMemberId ?? userId`
+  - COPPA disclosure in API response
+
+- [ ] (blocked on C3) **C4: Profile switching UI** — iOS
+  - `ProfileSessionManager` (new) — holds active profile, switching logic
+  - `ProfileSwitcherView` (new) — sheet from top-right avatar
+  - `APIClient` — attach `X-Acting-As-Member` header when acting as managed member
+  - "Voting as [name]" caption in VotingView
+
+- [ ] (blocked on C3, C4) **C5: Managed member creation UI** — iOS
+  - `AddManagedMemberView` + `AddManagedMemberViewModel` (new)
+  - COPPA disclosure text; content rating ceiling forced PG
+  - Accessible from GroupDetailView "Add Family Member"
+
+- [ ] (blocked on C2, C4, C5) **C6: Attendee selection UI** — iOS
+  - `AttendeeSelectionView` (new) — checkmark picker before round start
+  - Min 2 attendees; default all checked
+  - "Start Voting Round" visible to all members (not just creator)
+
+- [ ] (blocked on C1, C6) **C7: Round lifecycle completion + session history** — backend + iOS
+  - Backend: `transitionToWatched`, auto-transition to `rated`, `GET /groups/:id/sessions`
+  - iOS: `SessionHistoryView` + `SessionHistoryViewModel` (new)
+  - `discarded` displayed as "Expired"; `expired` automation deferred post-v1
 
 ---
 
@@ -160,6 +171,21 @@ Task 05 (done) ──► A1                ├──► A4 (iOS)
                     ┌──► B2 ──► B3 ──┐
                  B1                   ├──► B4 (iOS)
                     └────────────────┘
+                           │
+                           ▼
+                          C0
+                         / \
+                       C1   C2
+                       |     |
+                       |    C3
+                       |   / \
+                       | C4   |
+                       | | \  |
+                       | C5 \ |
+                       |  \  \|
+                       |   C6
+                        \ /
+                         C7
 
 Follow-ups (04-C, 05-A/B, etc.) ──► independent, slot anytime
 ```

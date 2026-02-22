@@ -6,20 +6,25 @@
 
 ## Data Entities
 
-### 1. User
+### 1. User / Member
+
+A user record represents either an **Independent member** (has a Cognito account) or a **Managed member** (no login; controlled by a parent user).
 
 | Field | Type | Notes |
 |---|---|---|
-| `user_id` | UUID | Primary identifier |
-| `email` | string | Unique; used for email sign-up |
-| `apple_id_sub` | string (nullable) | Apple ID subject identifier; used for Sign in with Apple |
-| `display_name` | string (max 30) | Shown to other group members |
+| `user_id` | UUID | Primary identifier. Cognito `sub` for independent members; `managed_<uuid>` for managed members. |
+| `email` | string (nullable) | Unique; used for email sign-up. Null for managed members. |
+| `apple_id_sub` | string (nullable) | Apple ID subject identifier; used for Sign in with Apple. Null for managed members. |
+| `display_name` | string (max 30) | Shown to other household members |
 | `avatar_key` | string | Key referencing a predefined avatar illustration |
+| `is_managed` | bool | `true` for managed members, `false` for independent |
+| `parent_user_id` | UUID (nullable) | For managed members: the `user_id` of the controlling independent user |
+| `content_rating_ceiling` | enum | Max content rating for this member. Managed members default to `PG`. |
 | `created_at` | timestamp | Account creation time |
 | `last_active_at` | timestamp | Last app open / API call |
-| `notification_prefs` | JSON | `{ vote_nudge: bool, pick_announce: bool, new_round: bool }` |
+| `notification_prefs` | JSON (nullable) | `{ vote_nudge: bool, pick_announce: bool, new_round: bool }`. Null for managed members. |
 
-**Privacy note:** We do not store real names beyond what the user enters as `display_name`. If using Sign in with Apple's "Hide My Email," we store the relay address only.
+**Privacy note:** We do not store real names beyond what the user enters as `display_name`. If using Sign in with Apple's "Hide My Email," we store the relay address only. Managed members have no email or Apple ID — the parent's account owns the managed profile.
 
 ### 2. Group
 
@@ -36,10 +41,10 @@
 | Field | Type | Notes |
 |---|---|---|
 | `group_id` | UUID → Group | |
-| `user_id` | UUID → User | |
+| `user_id` | UUID → User | `user_id` for independent; `managed_<uuid>` for managed members |
 | `role` | enum: `creator`, `member` | |
+| `member_type` | enum: `independent`, `managed` | Type of member |
 | `joined_at` | timestamp | |
-| `is_child_profile` | bool | If true, this profile is managed by the parent (`user_id` is the parent's) |
 
 ### 4. Preferences
 
@@ -64,16 +69,24 @@
 | `created_at` | timestamp | |
 | `expires_at` | timestamp | Default: created_at + 7 days |
 
-### 6. Suggestion Round
+### 6. Session (Movie Night Round)
+
+A movie night session with a full lifecycle. Any household member can create a session.
 
 | Field | Type | Notes |
 |---|---|---|
 | `round_id` | UUID | |
 | `group_id` | UUID → Group | |
-| `started_by` | UUID → User | |
-| `status` | enum: `voting`, `closed`, `picked`, `discarded` | |
+| `started_by` | UUID → Member | The member who created this session |
+| `status` | enum | `draft`, `voting`, `selected`, `watched`, `rated`, `expired` |
+| `attendees` | UUID[] → Member | Members participating in this session. Default: all household members. |
 | `created_at` | timestamp | |
-| `closed_at` | timestamp (nullable) | |
+| `voting_started_at` | timestamp (nullable) | Set when draft → voting |
+| `selected_at` | timestamp (nullable) | Set when pick locked in |
+| `watched_at` | timestamp (nullable) | Set when marked watched |
+| `rated_at` | timestamp (nullable) | Set when all attendees rated or creator closes ratings |
+
+**Lifecycle:** `draft → voting → selected → watched → rated → expired`
 
 ### 7. Suggestion (movies in a round)
 
@@ -87,34 +100,38 @@
 
 | Field | Type | Notes |
 |---|---|---|
-| `round_id` | UUID → Suggestion Round | |
+| `round_id` | UUID → Session | |
 | `tmdb_movie_id` | int | |
-| `user_id` | UUID → User | |
+| `member_id` | UUID → Member | Acting member (independent user or managed member) |
 | `vote` | enum: `up`, `down` | |
 | `voted_at` | timestamp | |
 
-**Constraint:** One vote per (round, movie, user). Changing a vote overwrites the previous one.
+**Constraint:** One vote per (round, movie, member). Changing a vote overwrites the previous one. When voting as a managed member, the vote is attributed to the managed member's ID.
 
 ### 9. Pick
 
 | Field | Type | Notes |
 |---|---|---|
 | `pick_id` | UUID | |
-| `round_id` | UUID → Suggestion Round | |
+| `round_id` | UUID → Session | |
 | `tmdb_movie_id` | int | The chosen movie |
-| `picked_by` | UUID → User | Group creator who confirmed |
+| `picked_by` | UUID → Member | Member who confirmed the pick |
 | `picked_at` | timestamp | |
 | `watched` | bool | Default: false |
 | `watched_at` | timestamp (nullable) | |
 
 ### 10. Rating
 
+Post-watch rating using a 3-point scale.
+
 | Field | Type | Notes |
 |---|---|---|
-| `pick_id` | UUID → Pick | |
-| `user_id` | UUID → User | |
-| `stars` | int (1–5) | |
+| `round_id` | UUID → Session | The session this rating belongs to |
+| `member_id` | UUID → Member | Acting member (independent user or managed member) |
+| `rating` | enum: `loved`, `liked`, `did_not_like` | |
 | `rated_at` | timestamp | |
+
+When all attending members have rated, the session auto-transitions to `rated` status. The creator can also close ratings manually if some attendees never rate.
 
 ---
 
@@ -132,7 +149,7 @@
 
 1. **Minimal collection:** We only collect data required for the core loop. No analytics PII (device fingerprinting, IDFA) in v1.
 2. **Family-visible, not public:** A user's preferences, votes, and ratings are visible to their group members only. Nothing is public.
-3. **Kids' data:** Child profiles (managed by a parent) are subject to COPPA considerations. We do not collect email or identifiers for children — the parent's account owns the child profile. We should consult legal counsel before launch (see open-questions.md).
+3. **Kids' data:** Managed member profiles (created by a parent/guardian) are subject to COPPA considerations. We do not collect email, login credentials, or device identifiers for managed members — the parent's authenticated account owns the managed profile. Managed members have a mandatory content-rating ceiling of PG. We should consult legal counsel before launch (see open-questions.md).
 4. **Third-party data:** Movie metadata comes from TMDB. We cache it locally but do not send user data to TMDB beyond standard API requests (movie lookups). No user PII is shared with third parties.
 5. **Apple App Privacy:** We will declare the following data types in the App Store privacy label:
    - Contact Info (email) — used for account creation
@@ -159,7 +176,7 @@
 Per Apple App Store requirements and privacy regulations:
 - Users can request full account deletion from Settings.
 - All personal data (email, display name, preferences, votes, ratings) is deleted within **30 days** of the request.
-- An anonymized record of votes/ratings may be retained for aggregate analytics (e.g., "4 members rated this movie 4.2 stars" → the individual attribution is removed). This is TBD pending legal review.
+- An anonymized record of votes/ratings may be retained for aggregate analytics (e.g., "3 members loved this movie" → the individual attribution is removed). This is TBD pending legal review.
 - The user is removed from their group immediately; their historical votes/ratings in the group show as "[Deleted User]".
 
 ---

@@ -15,23 +15,40 @@ Tracks the ordered sequence of PRs for the v1 vertical slice.
 | #10 | `feat/task-04b-picks-watched` | 04-B | Pick model, pick-service, picks routes, IAM grant, tests | 2026-02-16 |
 | #11 | `feat/task-05-suggestions` | 05 | TMDB client, suggestion algorithm, iOS suggestions UI | 2026-02-17 |
 
-## Up Next — Slice A: Watchlists + Movie Details + Mark Watched
+## Slice A: Watchlists + Movie Details + Mark Watched — Done
 
-| Order | Task | Branch (proposed) | Summary | Status | Depends On |
-|---|---|---|---|---|---|
-| 1 | **A1** | `feat/slice-a1-watchlist` | Watchlist DynamoDB table, model, service (add/remove/list), routes (`POST/GET/DELETE /groups/:id/watchlist`), IAM grant, 31 tests | **ready** | — |
-| 2 | **A2** | `feat/slice-a2-watched-movies` | WatchedMovies DynamoDB table, direct mark-watched service, 24h undo, combined watched list (picks + direct), auto-remove from watchlist, update suggestion exclusion, 34 tests | ready | A1 |
-| 3 | **A3** | `feat/slice-a3-movie-detail` | `GET /movies/:tmdb_movie_id?group_id=X` with TMDB metadata + group context (watchlist/watched/vote history/active round), IAM grants for rounds/suggestions/votes tables, 15 tests | ready | A1, A2 |
-| 4 | **A4** | `feat/slice-a4-ios-watchlist` | iOS: WatchlistView, MovieDetailView with group context, mark-watched flow, "Save for Later" on suggestion cards | ready | A1, A2, A3 |
+Slice A was committed directly to main (no individual PRs per task).
 
-## Then — Slice B: Tonight Queue + Voting + Select Winner
+| Order | Task | Summary | Status |
+|---|---|---|---|
+| 1 | **A1** | Watchlist DynamoDB table, model, service, routes, IAM grant, tests | **done** |
+| 2 | **A2** | WatchedMovies table, direct mark-watched service, 24h undo, combined watched list, auto-remove from watchlist, suggestion exclusion, tests | **done** |
+| 3 | **A3** | `GET /movies/:tmdb_movie_id?group_id=X` with TMDB metadata + group context, IAM grants, tests | **done** |
+| 4 | **A4** | iOS: WatchlistView, MovieDetailView, mark-watched flow, "Save for Later" on suggestion cards | **done** |
 
-| Order | Task | Branch (proposed) | Summary | Status | Depends On |
-|---|---|---|---|---|---|
-| 5 | **B1** | `feat/slice-b1-rounds` | Round model, round-service (create/get/close), persist suggestions, one-active-round constraint, watchlist integration at round start, routes (`POST /groups/:id/rounds`, `GET/PATCH /rounds/:id`), IAM grants for rounds + suggestions tables, 36 tests | blocked | Slice A |
-| 6 | **B2** | `feat/slice-b2-voting` | Vote model, vote-service (submit/change/results), ranking by net score + tie-breaking, routes (`POST /rounds/:id/votes`, `GET /rounds/:id/results`), IAM grant for votes table, concurrency tests, 36 tests | blocked | B1 |
-| 7 | **B3** | `feat/slice-b3-pick` | `POST /rounds/:id/pick` with conditional write (exactly-one per round), round lifecycle (voting→closed→picked), double-tap concurrency test, 24 tests | blocked | B1, B2 |
-| 8 | **B4** | `feat/slice-b4-ios-voting` | iOS: StartRoundView, VotingView, ResultsView, PickConfirmationView, "Pick Tonight's Movie" from Home | blocked | B1, B2, B3 |
+## Slice B: Tonight Queue + Voting + Select Winner — Done
+
+| PR | Branch | Task | Summary | Merged |
+|---|---|---|---|---|
+| #17 | `feat/slice-b-rounds-voting-pick` | B1–B3 | Round service, voting service, pick lock-in, round lifecycle | 2026-02-21 |
+| #18 | `feat/slice-b-rounds-voting-pick` | B4 | iOS: StartRoundView, VotingView, ResultsView, PickConfirmationView | 2026-02-21 |
+
+## Up Next — Slice C: Multi-User Household / Member Model Migration
+
+**Plan:** [plan-slice-c-multi-user.md](plan-slice-c-multi-user.md)
+
+**Depends on:** Slice B (round/voting infrastructure)
+
+| Order | Task | Summary | Status | Depends On |
+|---|---|---|---|---|
+| 1 | **C0** | Baseline schema alignment — add member_type, attendees, normalizeStatus adapter | blocked | Slice B |
+| 2 | **C1** | Ratings service — 3-point scale (Loved/Liked/Did Not Like), backend + iOS | blocked | C0 |
+| 3 | **C2** | Attendee selection backend + anyone-can-start | blocked | C0 |
+| 4 | **C3** | Managed member infrastructure — X-Acting-As-Member header, managed member CRUD | blocked | C2 |
+| 5 | **C4** | Profile switching UI — ProfileSessionManager, ProfileSwitcherView | blocked | C3 |
+| 6 | **C5** | Managed member creation UI — AddManagedMemberView, COPPA disclosure | blocked | C3, C4 |
+| 7 | **C6** | Attendee selection UI — AttendeeSelectionView, min 2, default all checked | blocked | C2, C4, C5 |
+| 8 | **C7** | Round lifecycle completion + session history + close-ratings | blocked | C1, C6 |
 
 ## Follow-Ups (Can Slot In Anytime)
 
@@ -43,9 +60,8 @@ Tracks the ordered sequence of PRs for the v1 vertical slice.
 
 ## Notes
 
-- **A1 is the next PR to build.** It is the only ready task with no blockers.
-- A1 and A2 must be sequential (A2 depends on WatchlistService for auto-remove).
-- B1 can technically start in parallel with A3/A4 by stubbing watchlist integration, but it's cleaner to wait for Slice A to complete.
+- **Slices A and B are complete.** Slice C (multi-user household model) is the next body of work.
+- C0 is the entry point — additive schema changes with no behavior change.
+- C1 and C2 can proceed in parallel after C0.
 - All backend PRs include CDK IAM grants and CDK assertion tests.
-- iOS PRs (A4, B4) depend on all their respective backend PRs.
-- Follow-up tasks (04-C, 05-*) can be done in parallel with any slice PR. Consider batching P1 items (05-A, 05-B) into a single cleanup PR before starting Slice A.
+- Follow-up tasks (04-C, 05-*) can be done in parallel with any slice PR.

@@ -71,12 +71,16 @@
 
 ---
 
-### OQ-08: Multi-device / multi-account per household
+### OQ-08: Multi-device / multi-account per household — RESOLVED
 **Question:** Should family members each have their own Apple ID / device, or should we support multiple profiles on a single device?
 
 **Risk:** Younger kids may not have their own iPhone. Parents may want to set up the whole family from one device.
 
-**Suggested default:** Support **child profiles** (US-25) that live under a parent's account for kids without devices. Each teen/adult should have their own account. v1 does not support fast-switching between accounts on one device.
+**Resolution:** Two member types:
+- **Independent members** have their own Cognito account and sign in on their own device. They cannot be impersonated from other devices.
+- **Managed members** have no login. Created by a parent/household admin. Accessible from any household device via profile switching.
+- Any device logged into the household can switch between the authenticated user and any managed members they control.
+- See US-25 (managed members), US-42 (profile switching), US-43 (attendee selection).
 
 ---
 
@@ -148,10 +152,10 @@ These assumptions are baked into the spec. If any prove wrong, revisit the affec
 | # | Assumption | Affects |
 |---|---|---|
 | A1 | TMDB is the movie metadata source (free tier sufficient for v1 scale) | brief, data, flows |
-| A2 | Group sizes are 2–8 people | brief, flows, data |
-| A3 | One group per user in v1 | brief, stories, data |
+| A2 | Household sizes are 2–8 members | brief, flows, data |
+| A3 | One household per authenticated account in v1 | brief, stories, data |
 | A4 | Families trust each other (votes are visible, any member can mark watched) | flows, stories |
-| A5 | Kids under 8 don't have their own iOS device | stories (US-25) |
+| A5 | Kids under 8 are represented as managed members (no login, parent-controlled) | stories (US-25) |
 | A6 | No revenue in v1; free app with no ads | brief |
 | A7 | Push notifications via APNs (standard iOS) | stories, flows |
 | A8 | The app is online-only; no offline-first architecture | flows |

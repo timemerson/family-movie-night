@@ -10,6 +10,7 @@ Family Movie Night is an iOS app that helps households collaboratively pick a mo
 
 Members:
 - Belong to a single household (one household per user in v1)
+- Are either **Independent** (own Cognito account) or **Managed** (no login; created by a parent user, accessed via profile switching)
 - Set preferences (genre, MPAA rating)
 - Receive 5–8 suggested movies via deterministic filtering against TMDB data
 - Vote (thumbs up/down or stronger positive)
@@ -26,6 +27,8 @@ Platform:
 # Repository Structure
 
 - `docs/product/` — Product specs (brief, user stories, flows, data model, open questions)
+- `docs/architecture/` — Architecture docs (overview, data model, API, sync, AWS plan)
+- `docs/build/` — Build plans, backlog, PR sequence, slice plans
 - `ios/` — iOS app
 - `backend/` — Backend service
 - `adr/` — Architecture Decision Records
@@ -53,7 +56,7 @@ Platform:
 # Key Constraints
 
 - TMDB is the movie metadata source (free tier)
-- Group size: 2–8 members
+- Household size: 2–8 members
 - Content ratings: MPAA (G/PG/PG-13/R)
 - Suggestion algorithm: deterministic filtering + popularity scoring (no ML in v1)
 - Online-only
