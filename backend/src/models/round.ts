@@ -45,6 +45,12 @@ export const CloseRoundSchema = z.object({
   status: z.literal("closed"),
 });
 
+// --- Update Round Status Request (watched, rated transitions) ---
+
+export const UpdateRoundStatusSchema = z.object({
+  status: z.enum(["closed", "watched", "rated"]),
+});
+
 // --- Pick Movie Request ---
 
 export const PickMovieSchema = z.object({

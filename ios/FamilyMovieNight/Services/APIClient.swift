@@ -5,6 +5,10 @@ class APIClient {
     private let baseURL: URL
     private let authService: AuthService
 
+    var currentUserId: String {
+        authService.userId ?? ""
+    }
+
     init(baseURL: URL, authService: AuthService) {
         self.baseURL = baseURL
         self.authService = authService

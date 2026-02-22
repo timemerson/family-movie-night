@@ -8,7 +8,7 @@ import { WatchedService } from "../services/watched-service.js";
 import { SuggestionService } from "../services/suggestion-service.js";
 import { RoundService } from "../services/round-service.js";
 import { TMDBClient } from "../services/tmdb-client.js";
-import { CreateRoundSchema, CloseRoundSchema, PickMovieSchema } from "../models/round.js";
+import { CreateRoundSchema, CloseRoundSchema, UpdateRoundStatusSchema, PickMovieSchema } from "../models/round.js";
 import { getDocClient, tableName } from "../lib/dynamo.js";
 import { ValidationError } from "../lib/errors.js";
 
@@ -147,20 +147,32 @@ rounds.get("/rounds/:round_id", async (c) => {
   return c.json(roundDetails);
 });
 
-// PATCH /rounds/:round_id — close a round (creator only)
+// PATCH /rounds/:round_id — transition round status
+// Supported transitions: voting->closed, selected->watched, watched->rated
 rounds.patch("/rounds/:round_id", async (c) => {
   const userId = c.get("userId");
   const roundId = c.req.param("round_id");
 
   const raw = await c.req.json();
-  const parsed = CloseRoundSchema.safeParse(raw);
+  const parsed = UpdateRoundStatusSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new ValidationError("Invalid request: status must be 'closed'");
+    throw new ValidationError(
+      "Invalid request: status must be 'closed', 'watched', or 'rated'",
+    );
   }
 
   const { roundService } = getServices([]);
 
-  const updated = await roundService.closeRound(roundId, userId);
+  let updated;
+  if (parsed.data.status === "closed") {
+    updated = await roundService.closeRound(roundId, userId);
+  } else {
+    updated = await roundService.transitionStatus(
+      roundId,
+      parsed.data.status,
+      userId,
+    );
+  }
   return c.json(updated);
 });
 
