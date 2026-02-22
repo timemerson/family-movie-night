@@ -154,6 +154,7 @@ struct GroupDetailView: View {
                             pick: pick,
                             roundId: roundId,
                             groupId: group.groupId,
+                            isCreator: isCreator,
                             apiClient: viewModel.apiClient
                         )
                     }
