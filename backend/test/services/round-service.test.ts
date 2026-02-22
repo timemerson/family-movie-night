@@ -829,4 +829,133 @@ describe("RoundService", () => {
       expect(mockSend).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe("transitionStatus", () => {
+    it("transitions selected → watched for any member", async () => {
+      // getRoundBasic
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "selected",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      // requireMember returns regular member
+      mockGroupService.requireMember.mockResolvedValueOnce({
+        user_id: "user-2",
+        role: "member",
+      });
+      // UpdateCommand
+      mockSend.mockResolvedValueOnce({
+        Attributes: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "watched",
+          watched_at: "2026-02-22T00:00:00Z",
+        },
+      });
+
+      const result = await service.transitionStatus("r-1", "watched", "user-2");
+
+      expect(result.status).toBe("watched");
+    });
+
+    it("transitions watched → rated for creator", async () => {
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "watched",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      mockGroupService.requireMember.mockResolvedValueOnce({
+        user_id: "user-1",
+        role: "creator",
+      });
+      mockSend.mockResolvedValueOnce({
+        Attributes: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "rated",
+          rated_at: "2026-02-22T01:00:00Z",
+        },
+      });
+
+      const result = await service.transitionStatus("r-1", "rated", "user-1");
+
+      expect(result.status).toBe("rated");
+    });
+
+    it("throws ForbiddenError when non-creator tries watched → rated", async () => {
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "watched",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      mockGroupService.requireMember.mockResolvedValueOnce({
+        user_id: "user-2",
+        role: "member",
+      });
+
+      await expect(
+        service.transitionStatus("r-1", "rated", "user-2"),
+      ).rejects.toThrow("Only the group creator can close ratings");
+    });
+
+    it("throws ConflictError for invalid transition voting → watched", async () => {
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      mockGroupService.requireMember.mockResolvedValueOnce({
+        user_id: "user-1",
+        role: "creator",
+      });
+
+      await expect(
+        service.transitionStatus("r-1", "watched", "user-1"),
+      ).rejects.toThrow("Cannot transition from 'voting' to 'watched'");
+    });
+
+    it("throws ConflictError for invalid transition selected → rated", async () => {
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "selected",
+          started_by: "user-1",
+          created_at: "2026-02-21T20:00:00Z",
+        },
+      });
+      mockGroupService.requireMember.mockResolvedValueOnce({
+        user_id: "user-1",
+        role: "creator",
+      });
+
+      await expect(
+        service.transitionStatus("r-1", "rated", "user-1"),
+      ).rejects.toThrow("Cannot transition from 'selected' to 'rated'");
+    });
+
+    it("throws NotFoundError when round does not exist", async () => {
+      mockSend.mockResolvedValueOnce({ Item: undefined });
+
+      await expect(
+        service.transitionStatus("r-missing", "watched", "user-1"),
+      ).rejects.toThrow("Round not found");
+    });
+  });
 });
