@@ -18,9 +18,35 @@ struct GroupMember: Codable, Identifiable {
     let avatarKey: String
     let role: String
     let joinedAt: String
+    // Slice C4/C5: Managed member fields — optional for backward compat with existing records
+    let isManaged: Bool?
+    let parentUserId: String?
+    let memberType: String?  // "independent" | "managed"
 
     var id: String { userId }
     var isCreator: Bool { role == "creator" }
+    var isManagedMember: Bool { isManaged == true }
+
+    // Convenience init for code that predates managed member fields
+    init(
+        userId: String,
+        displayName: String,
+        avatarKey: String,
+        role: String,
+        joinedAt: String,
+        isManaged: Bool? = nil,
+        parentUserId: String? = nil,
+        memberType: String? = nil
+    ) {
+        self.userId = userId
+        self.displayName = displayName
+        self.avatarKey = avatarKey
+        self.role = role
+        self.joinedAt = joinedAt
+        self.isManaged = isManaged
+        self.parentUserId = parentUserId
+        self.memberType = memberType
+    }
 }
 
 struct CreateGroupRequest: Codable {
