@@ -445,6 +445,63 @@ export class RoundService {
     return pick;
   }
 
+  /**
+   * Transition a round to a new status with validation.
+   * Valid transitions:
+   *   voting -> closed (creator only, existing closeRound method)
+   *   selected -> watched (any member)
+   *   watched -> rated (creator only, or auto when all attendees rated)
+   */
+  async transitionStatus(
+    roundId: string,
+    targetStatus: "watched" | "rated",
+    userId: string,
+  ): Promise<Round> {
+    const round = await this.getRoundBasic(roundId);
+    if (!round) {
+      throw new NotFoundError("Round not found");
+    }
+
+    // Validate membership
+    const member = await this.groupService.requireMember(round.group_id, userId);
+
+    // Validate transition
+    const validTransitions: Record<string, string[]> = {
+      selected: ["watched"],
+      watched: ["rated"],
+    };
+    const allowed = validTransitions[round.status] ?? [];
+    if (!allowed.includes(targetStatus)) {
+      throw new ConflictError(
+        `Cannot transition from '${round.status}' to '${targetStatus}'`,
+      );
+    }
+
+    // Only creator can close ratings
+    if (targetStatus === "rated" && (member as any).role !== "creator") {
+      throw new ForbiddenError("Only the group creator can close ratings");
+    }
+
+    const now = new Date().toISOString();
+    const updateExpr =
+      targetStatus === "watched"
+        ? "SET #s = :s, watched_at = :ts"
+        : "SET #s = :s, rated_at = :ts";
+
+    const result = await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.roundsTable,
+        Key: { round_id: roundId },
+        UpdateExpression: updateExpr,
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: { ":s": targetStatus, ":ts": now },
+        ReturnValues: "ALL_NEW",
+      }),
+    );
+
+    return result.Attributes as Round;
+  }
+
   /** Get round without joins (for internal checks) */
   async getRoundBasic(roundId: string): Promise<Round | null> {
     const result = await this.docClient.send(

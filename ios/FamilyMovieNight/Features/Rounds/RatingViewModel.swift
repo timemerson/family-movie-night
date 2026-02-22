@@ -35,6 +35,7 @@ class RatingViewModel: ObservableObject {
     // MARK: - Private
     private var roundId:        String = ""
     private var activeMemberId: String = ""
+    private var apiClient:      APIClient?
     private var pollingTask:    Task<Void, Never>?
 
     // Movie metadata (passed in from caller)
@@ -76,7 +77,8 @@ class RatingViewModel: ObservableObject {
         movieTitle:        String,
         movieYear:         Int,
         movieContentRating: String?,
-        posterURL:         URL?
+        posterURL:         URL?,
+        apiClient:         APIClient? = nil
     ) {
         self.roundId = roundId
         self.activeMemberId = activeMemberId
@@ -86,55 +88,162 @@ class RatingViewModel: ObservableObject {
         self.movieYear = movieYear
         self.movieContentRating = movieContentRating
         self.posterURL = posterURL
+        self.apiClient = apiClient
     }
 
-    // MARK: - Fake API Operations (Dev Harness)
+    // MARK: - API Operations
 
     func loadRatings() async {
         isLoading = true
-        try? await Task.sleep(for: .milliseconds(600))
-        // Populated by configure-time pre-seeding or left empty
+        error = nil
+
+        guard let apiClient else {
+            // Preview / dev harness mode — no real API
+            try? await Task.sleep(for: .milliseconds(600))
+            isLoading = false
+            return
+        }
+
+        do {
+            let response: RatingsListResponse = try await apiClient.request(
+                "GET",
+                path: "/rounds/\(roundId)/ratings"
+            )
+            ratingEntries = response.ratings.map { entry in
+                RatingEntry(
+                    memberId:    entry.memberId,
+                    displayName: entry.displayName,
+                    avatarKey:   entry.avatarKey ?? "avatar_bear",
+                    rating:      entry.ratingValue,
+                    ratedAt:     nil
+                )
+            }
+            // If the active member already rated, pre-select their rating
+            if let existing = ratingEntries.first(where: { $0.memberId == activeMemberId }),
+               let existingRating = existing.rating {
+                selectedRating = existingRating
+            }
+        } catch {
+            self.error = errorMessage(from: error)
+        }
+
         isLoading = false
+
+        // Start polling if we've submitted (or already rated) and not all done
+        if (hasSubmitted || alreadyRated) && !allRated {
+            startPolling()
+        }
     }
 
     func submitRating() async {
         guard let selected = selectedRating else { return }
         isSubmitting = true
+        error = nil
+
         if UIDevice.current.userInterfaceIdiom == .phone {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         }
-        try? await Task.sleep(for: .milliseconds(800))
-        // Simulate the active member's entry updating
-        ratingEntries = ratingEntries.map { entry in
-            guard entry.memberId == activeMemberId else { return entry }
-            return RatingEntry(
-                memberId:    entry.memberId,
-                displayName: entry.displayName,
-                avatarKey:   entry.avatarKey,
-                rating:      selected,
-                ratedAt:     Date()
-            )
-        }
-        hasSubmitted = true
-        isSubmitting = false
-        if allRated {
-            if UIDevice.current.userInterfaceIdiom == .phone {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+        guard let apiClient else {
+            // Preview / dev harness mode
+            try? await Task.sleep(for: .milliseconds(800))
+            ratingEntries = ratingEntries.map { entry in
+                guard entry.memberId == activeMemberId else { return entry }
+                return RatingEntry(
+                    memberId:    entry.memberId,
+                    displayName: entry.displayName,
+                    avatarKey:   entry.avatarKey,
+                    rating:      selected,
+                    ratedAt:     Date()
+                )
             }
+            hasSubmitted = true
+            isSubmitting = false
+            if allRated {
+                if UIDevice.current.userInterfaceIdiom == .phone {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                }
+            }
+            return
+        }
+
+        do {
+            let request = SubmitRatingRequest(rating: selected.rawValue)
+            let _: RatingResponse = try await apiClient.request(
+                "POST",
+                path: "/rounds/\(roundId)/ratings",
+                body: request
+            )
+
+            // Update local entry to reflect the submitted rating
+            ratingEntries = ratingEntries.map { entry in
+                guard entry.memberId == activeMemberId else { return entry }
+                return RatingEntry(
+                    memberId:    entry.memberId,
+                    displayName: entry.displayName,
+                    avatarKey:   entry.avatarKey,
+                    rating:      selected,
+                    ratedAt:     Date()
+                )
+            }
+            hasSubmitted = true
+            isSubmitting = false
+
+            if allRated {
+                if UIDevice.current.userInterfaceIdiom == .phone {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                }
+            } else {
+                startPolling()
+            }
+        } catch {
+            isSubmitting = false
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
+            self.error = errorMessage(from: error)
         }
     }
 
     func closeRatings() async {
-        try? await Task.sleep(for: .milliseconds(400))
-        ratingsClosed = true
+        guard let apiClient else {
+            // Preview / dev harness mode
+            try? await Task.sleep(for: .milliseconds(400))
+            ratingsClosed = true
+            return
+        }
+
+        do {
+            struct StatusUpdate: Encodable {
+                let status: String
+            }
+            let _: RoundDetails = try await apiClient.request(
+                "PATCH",
+                path: "/rounds/\(roundId)",
+                body: StatusUpdate(status: "rated")
+            )
+            ratingsClosed = true
+            stopPolling()
+        } catch {
+            self.error = "Failed to close ratings. Try again."
+        }
     }
 
-    // MARK: - Polling (no-op in dev harness)
+    // MARK: - Polling
 
     func startPolling() {
+        stopPolling()
         pollingTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { break }
+                await refreshRatings()
+                if allRated {
+                    if UIDevice.current.userInterfaceIdiom == .phone {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    }
+                    break
+                }
             }
         }
     }
@@ -142,6 +251,48 @@ class RatingViewModel: ObservableObject {
     func stopPolling() {
         pollingTask?.cancel()
         pollingTask = nil
+    }
+
+    // MARK: - Private Helpers
+
+    private func refreshRatings() async {
+        guard let apiClient else { return }
+
+        do {
+            let response: RatingsListResponse = try await apiClient.request(
+                "GET",
+                path: "/rounds/\(roundId)/ratings"
+            )
+            ratingEntries = response.ratings.map { entry in
+                RatingEntry(
+                    memberId:    entry.memberId,
+                    displayName: entry.displayName,
+                    avatarKey:   entry.avatarKey ?? "avatar_bear",
+                    rating:      entry.ratingValue,
+                    ratedAt:     nil
+                )
+            }
+        } catch {
+            // Silently fail polling — don't surface transient errors
+        }
+    }
+
+    private func errorMessage(from error: Error) -> String {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .httpError(let statusCode, _):
+                switch statusCode {
+                case 400: return "Something went wrong. Try again."
+                case 403: return "You're not listed as an attendee for this session."
+                case 404: return "This session wasn't found."
+                case 409: return "Your rating has already been recorded."
+                default:  return "Couldn't connect. Check your connection and try again."
+                }
+            case .invalidResponse:
+                return "Couldn't connect. Check your connection and try again."
+            }
+        }
+        return "Couldn't connect. Check your connection and try again."
     }
 }
 

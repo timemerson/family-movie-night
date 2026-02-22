@@ -163,11 +163,11 @@ export class DataStack extends cdk.Stack {
       partitionKey: { name: "round_id", type: dynamodb.AttributeType.STRING },
     });
 
-    // Ratings: PK=pick_id, SK=user_id
+    // Ratings: PK=round_id, SK=member_id
     this.ratingsTable = new dynamodb.Table(this, "Ratings", {
       tableName: `${id}-Ratings`,
-      partitionKey: { name: "pick_id", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "user_id", type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: "round_id", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "member_id", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy,
       pointInTimeRecovery: pitr,

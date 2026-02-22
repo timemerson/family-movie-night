@@ -2,18 +2,15 @@ import SwiftUI
 
 struct PickConfirmationView: View {
     let pick: RoundPick
+    let roundId: String
     let groupId: String
     let apiClient: APIClient?
     @Environment(\.dismiss) private var dismiss
     @State private var markingWatched = false
     @State private var markedWatched = false
+    @State private var showRatingSheet = false
     @State private var error: String?
-
-    var posterURL: URL? {
-        // Pick response doesn't include poster_path, so we can't show it directly
-        // In a full implementation, we'd pass it through or fetch movie details
-        nil
-    }
+    @StateObject private var ratingViewModel = RatingViewModel()
 
     var body: some View {
         VStack(spacing: 24) {
@@ -62,6 +59,9 @@ struct PickConfirmationView: View {
         .padding()
         .navigationTitle("Movie Picked!")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showRatingSheet) {
+            RatingView(viewModel: ratingViewModel)
+        }
     }
 
     private func markWatched() async {
@@ -70,17 +70,30 @@ struct PickConfirmationView: View {
         error = nil
 
         do {
-            struct MarkWatchedRequest: Codable {
-                let tmdbMovieId: Int
-                let source: String
+            struct StatusUpdate: Encodable {
+                let status: String
             }
-            let request = MarkWatchedRequest(tmdbMovieId: pick.tmdbMovieId, source: "round_pick")
-            let _: WatchedMovie = try await apiClient.request(
-                "POST",
-                path: "/groups/\(groupId)/watched",
+            let request = StatusUpdate(status: "watched")
+            let _: RoundDetails = try await apiClient.request(
+                "PATCH",
+                path: "/rounds/\(roundId)",
                 body: request
             )
             markedWatched = true
+
+            // Configure and present the rating view
+            ratingViewModel.configure(
+                roundId: roundId,
+                activeMemberId: apiClient.currentUserId,
+                isCreator: true,
+                activeProfileName: nil,
+                movieTitle: pick.title,
+                movieYear: 0,
+                movieContentRating: nil,
+                posterURL: nil,
+                apiClient: apiClient
+            )
+            showRatingSheet = true
         } catch {
             self.error = "Failed to mark as watched"
         }

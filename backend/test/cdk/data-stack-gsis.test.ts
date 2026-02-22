@@ -64,12 +64,12 @@ describe("DataStack GSIs (additional coverage)", () => {
     });
   });
 
-  it("Ratings has composite key (pick_id, user_id)", () => {
+  it("Ratings has composite key (round_id, member_id)", () => {
     template.hasResourceProperties("AWS::DynamoDB::Table", {
       TableName: "GsiData-Ratings",
       KeySchema: [
-        { AttributeName: "pick_id", KeyType: "HASH" },
-        { AttributeName: "user_id", KeyType: "RANGE" },
+        { AttributeName: "round_id", KeyType: "HASH" },
+        { AttributeName: "member_id", KeyType: "RANGE" },
       ],
     });
   });

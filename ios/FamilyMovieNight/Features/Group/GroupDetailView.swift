@@ -148,9 +148,11 @@ struct GroupDetailView: View {
                         }
                     }
                 case .picked:
-                    if let pick = votingViewModel.pick {
+                    if let pick = votingViewModel.pick,
+                       let roundId = votingViewModel.roundId {
                         PickConfirmationView(
                             pick: pick,
+                            roundId: roundId,
                             groupId: group.groupId,
                             apiClient: viewModel.apiClient
                         )

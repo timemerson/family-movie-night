@@ -10,6 +10,8 @@ if (!existsSync("dist")) {
 
 export default defineConfig({
   test: {
+    pool: "forks",
+    poolOptions: { forks: { minForks: 1, maxForks: 1 } },
     include: ["test/**/*.test.ts"],
   },
 });
