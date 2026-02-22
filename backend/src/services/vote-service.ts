@@ -192,12 +192,24 @@ export class VoteService {
   async getVoteProgress(
     roundId: string,
     groupId: string,
+    attendees?: string[] | null,
   ): Promise<{ voted: number; total: number }> {
     // Get all votes to count unique voters
     const votes = await this.getVotesForRound(roundId);
     const uniqueVoters = new Set(votes.map((v) => v.user_id));
 
-    // Get member count
+    // Use attendees as denominator when present, otherwise fall back to all members
+    if (attendees && attendees.length > 0) {
+      // Only count voters who are in the attendees list
+      const attendeeSet = new Set(attendees);
+      const attendeeVoters = [...uniqueVoters].filter((v) => attendeeSet.has(v));
+      return {
+        voted: attendeeVoters.length,
+        total: attendees.length,
+      };
+    }
+
+    // Fallback: all group members
     const membersResult = await this.docClient.send(
       new QueryCommand({
         TableName: this.membershipsTable,

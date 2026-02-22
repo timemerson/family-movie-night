@@ -35,6 +35,7 @@ export function normalizeStatus(status: string): Round["status"] {
 export const CreateRoundSchema = z.object({
   exclude_movie_ids: z.array(z.number()).optional().default([]),
   include_watchlist: z.boolean().optional().default(false),
+  attendees: z.array(z.string()).optional(),
 });
 
 export type CreateRoundInput = z.infer<typeof CreateRoundSchema>;
@@ -93,6 +94,7 @@ export interface RoundWithDetails {
   started_by: string;
   created_at: string;
   closed_at?: string | null;
+  attendees?: string[] | null;
   suggestions: SuggestionWithVotes[];
   vote_progress: { voted: number; total: number };
   pick: {

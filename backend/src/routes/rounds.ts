@@ -91,7 +91,7 @@ rounds.post("/groups/:group_id/rounds", async (c) => {
   const { roundService } = getServices(streamingServices);
 
   // Parse optional body
-  let body: { exclude_movie_ids?: number[]; include_watchlist?: boolean } = {};
+  let body: { exclude_movie_ids?: number[]; include_watchlist?: boolean; attendees?: string[] } = {};
   try {
     const raw = await c.req.json();
     body = CreateRoundSchema.parse(raw);
@@ -103,6 +103,7 @@ rounds.post("/groups/:group_id/rounds", async (c) => {
     const result = await roundService.createRound(groupId, userId, {
       exclude_movie_ids: body.exclude_movie_ids,
       include_watchlist: body.include_watchlist,
+      attendees: body.attendees,
     });
 
     return c.json(
@@ -112,6 +113,7 @@ rounds.post("/groups/:group_id/rounds", async (c) => {
         status: result.round.status,
         started_by: result.round.started_by,
         created_at: result.round.created_at,
+        attendees: result.round.attendees ?? null,
         suggestions: result.suggestions,
         watchlist_eligible_count: result.watchlist_eligible_count,
         relaxed_constraints: result.relaxed_constraints,

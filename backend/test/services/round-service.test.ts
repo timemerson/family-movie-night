@@ -314,6 +314,7 @@ describe("RoundService", () => {
       expect(mockSuggestionService.getSuggestions).toHaveBeenCalledWith(
         "g-1",
         [550, 680],
+        undefined,
       );
     });
   });

@@ -26,9 +26,12 @@ export class SuggestionService {
   async getSuggestions(
     groupId: string,
     excludeMovieIds: number[] = [],
+    attendeeIds?: string[],
   ): Promise<SuggestionsResult> {
-    // Stage 1: Aggregate group preferences
-    const summary = await this.preferenceService.getGroupPreferenceSummary(groupId);
+    // Stage 1: Aggregate preferences (scoped to attendees if provided)
+    const summary = attendeeIds && attendeeIds.length > 0
+      ? await this.preferenceService.getGroupPreferenceSummaryForMembers(groupId, attendeeIds)
+      : await this.preferenceService.getGroupPreferenceSummary(groupId);
 
     if (summary.member_count < 2) {
       throw new ValidationError(

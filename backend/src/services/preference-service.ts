@@ -68,9 +68,22 @@ export class PreferenceService {
     return (result.Items ?? []) as Preference[];
   }
 
+  async getGroupPreferenceSummaryForMembers(
+    groupId: string,
+    memberIds: string[],
+  ): Promise<PreferenceSummary> {
+    const allPrefs = await this.getGroupPreferences(groupId);
+    const memberSet = new Set(memberIds);
+    const prefs = allPrefs.filter((p) => memberSet.has(p.user_id));
+    return this.buildSummary(prefs);
+  }
+
   async getGroupPreferenceSummary(groupId: string): Promise<PreferenceSummary> {
     const prefs = await this.getGroupPreferences(groupId);
+    return this.buildSummary(prefs);
+  }
 
+  private buildSummary(prefs: Preference[]): PreferenceSummary {
     if (prefs.length === 0) {
       return {
         liked_genres: [],
