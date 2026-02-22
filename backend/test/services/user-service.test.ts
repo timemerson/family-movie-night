@@ -54,6 +54,8 @@ describe("UserService", () => {
       expect(result.email).toBe("new@example.com");
       expect(result.display_name).toBe("new");
       expect(result.avatar_key).toBe("avatar_bear");
+      expect(result.is_managed).toBe(false);
+      expect(result.parent_user_id).toBeNull();
       expect(result.notification_prefs).toEqual({
         vote_nudge: true,
         pick_announce: true,

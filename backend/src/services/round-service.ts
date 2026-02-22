@@ -13,6 +13,7 @@ import type {
   RoundWithDetails,
   SuggestionWithVotes,
 } from "../models/round.js";
+import { normalizeStatus } from "../models/round.js";
 import type { Suggestion } from "../models/suggestion.js";
 import type { Pick } from "../models/pick.js";
 import type { GroupService } from "./group-service.js";
@@ -271,7 +272,7 @@ export class RoundService {
     return {
       round_id: round.round_id,
       group_id: round.group_id,
-      status: round.status,
+      status: normalizeStatus(round.status),
       started_by: round.started_by,
       created_at: round.created_at,
       closed_at: round.closed_at,
@@ -328,8 +329,10 @@ export class RoundService {
     );
 
     const rounds = (result.Items ?? []) as Round[];
+    // Normalize statuses before searching
+    const normalized = rounds.map((r) => ({ ...r, status: normalizeStatus(r.status) }));
     // Find the most recent active (voting) round
-    const active = rounds.find((r) => r.status === "voting");
+    const active = normalized.find((r) => r.status === "voting");
     return active ?? null;
   }
 
@@ -344,7 +347,8 @@ export class RoundService {
       }),
     );
 
-    return (result.Items ?? []) as Round[];
+    const rounds = (result.Items ?? []) as Round[];
+    return rounds.map((r) => ({ ...r, status: normalizeStatus(r.status) }));
   }
 
   async persistSuggestions(
@@ -384,7 +388,7 @@ export class RoundService {
       throw new ForbiddenError("Only the group creator can pick a movie");
     }
 
-    // Round must be voting or closed
+    // Round must be voting or closed to pick a movie
     if (round.status !== "voting" && round.status !== "closed") {
       throw new ConflictError(
         `Round is in '${round.status}' status, cannot pick`,
@@ -418,7 +422,7 @@ export class RoundService {
       poster_path: suggestion.poster_path,
     });
 
-    // Atomically transition round to 'picked' — attribute_not_exists(pick_id)
+    // Atomically transition round to 'selected' — attribute_not_exists(pick_id)
     // prevents a second pick even if two requests race past the query pre-check
     try {
       await this.docClient.send(
@@ -428,7 +432,7 @@ export class RoundService {
           UpdateExpression: "SET #s = :s, pick_id = :pid",
           ConditionExpression: "attribute_not_exists(pick_id)",
           ExpressionAttributeNames: { "#s": "status" },
-          ExpressionAttributeValues: { ":s": "picked", ":pid": pick.pick_id },
+          ExpressionAttributeValues: { ":s": "selected", ":pid": pick.pick_id },
         }),
       );
     } catch (err: any) {
@@ -449,6 +453,8 @@ export class RoundService {
         Key: { round_id: roundId },
       }),
     );
-    return (result.Item as Round) ?? null;
+    if (!result.Item) return null;
+    const round = result.Item as Round;
+    return { ...round, status: normalizeStatus(round.status) };
   }
 }

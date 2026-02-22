@@ -22,6 +22,7 @@ export const GroupMemberSchema = z.object({
   group_id: z.string(),
   user_id: z.string(),
   role: z.enum(["creator", "member"]),
+  member_type: z.enum(["independent", "managed"]).optional().default("independent"),
   joined_at: z.string(),
 });
 

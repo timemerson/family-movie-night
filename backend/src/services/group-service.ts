@@ -51,6 +51,7 @@ export class GroupService {
       group_id: groupId,
       user_id: userId,
       role: "creator",
+      member_type: "independent",
       joined_at: now,
     };
 
@@ -211,6 +212,7 @@ export class GroupService {
       group_id: groupId,
       user_id: userId,
       role: "member",
+      member_type: "independent",
       joined_at: now,
     };
 
