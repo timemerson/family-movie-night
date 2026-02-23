@@ -10,6 +10,7 @@ struct GroupDetailView: View {
     @StateObject private var votingViewModel = VotingViewModel()
     @State private var showShareSheet = false
     @State private var showLeaveConfirmation = false
+    @State private var showAddManagedMember = false
 
     enum RoundFlowPhase: Hashable {
         case idle
@@ -37,7 +38,19 @@ struct GroupDetailView: View {
                                 Text("Creator")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                            } else if member.isManagedMember {
+                                Text("Family Member")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
+                        }
+                    }
+
+                    if isCreator && group.members.count < 8 {
+                        Button {
+                            showAddManagedMember = true
+                        } label: {
+                            Label("Add Family Member", systemImage: "person.badge.plus")
                         }
                     }
                 }
@@ -118,6 +131,18 @@ struct GroupDetailView: View {
             .sheet(isPresented: $showShareSheet) {
                 if let invite = viewModel.currentInvite {
                     ShareInviteView(inviteUrl: invite.inviteUrl, inviteToken: invite.inviteToken)
+                }
+            }
+            .sheet(isPresented: $showAddManagedMember) {
+                let vm = AddManagedMemberViewModel()
+                AddManagedMemberView(viewModel: vm) { _, _ in
+                    // Reload group to pick up the new member
+                    Task { await viewModel.loadMyGroup() }
+                }
+                .onAppear {
+                    if let apiClient = viewModel.apiClient {
+                        vm.configure(apiClient: apiClient, groupId: group.groupId)
+                    }
                 }
             }
             .confirmationDialog(

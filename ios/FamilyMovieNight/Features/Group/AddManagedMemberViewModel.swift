@@ -56,11 +56,13 @@ class AddManagedMemberViewModel: ObservableObject {
 
     // MARK: - Private
 
+    private var apiClient: APIClient?
     private var groupId: String = ""
 
     // MARK: - Configuration
 
-    func configure(groupId: String) {
+    func configure(apiClient: APIClient, groupId: String) {
+        self.apiClient = apiClient
         self.groupId = groupId
     }
 
@@ -73,36 +75,67 @@ class AddManagedMemberViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Submission (Fake — Dev Harness)
+    // MARK: - Submission
 
     func submit() async {
         guard canSubmit else { return }
+        guard let apiClient else {
+            // Preview/harness mode — no API client configured
+            submissionState = .submitting
+            try? await Task.sleep(for: .milliseconds(500))
+            withAnimation(.easeInOut(duration: 0.3)) {
+                submissionState = .success(displayName: trimmedName, avatarKey: selectedAvatarKey)
+            }
+            return
+        }
         submissionState = .submitting
 
-        try? await Task.sleep(for: .milliseconds(1000))
-
-        // Simulate success
-        withAnimation(.easeInOut(duration: 0.3)) {
-            submissionState = .success(
+        do {
+            let request = CreateManagedMemberRequest(
                 displayName: trimmedName,
                 avatarKey: selectedAvatarKey
             )
-        }
+            let _: CreateManagedMemberResponse = try await apiClient.request(
+                "POST",
+                path: "/groups/\(groupId)/members/managed",
+                body: request
+            )
 
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-        }
-    }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                submissionState = .success(
+                    displayName: trimmedName,
+                    avatarKey: selectedAvatarKey
+                )
+            }
 
-    func simulateError() async {
-        guard canSubmit else { return }
-        submissionState = .submitting
-        try? await Task.sleep(for: .milliseconds(800))
-        withAnimation {
-            submissionState = .error("Couldn't add this member. Your household may be full.")
-        }
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+        } catch let apiError as APIError {
+            let message: String
+            switch apiError {
+            case .httpError(let statusCode, _):
+                switch statusCode {
+                case 403: message = "Only the group creator can add family members."
+                case 409: message = "Your household is full (maximum 8 members)."
+                default: message = "Something went wrong (error \(statusCode))."
+                }
+            case .invalidResponse:
+                message = "Could not reach the server. Check your connection."
+            }
+            withAnimation {
+                submissionState = .error(message)
+            }
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
+        } catch {
+            withAnimation {
+                submissionState = .error("An unexpected error occurred. Please try again.")
+            }
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
         }
     }
 
