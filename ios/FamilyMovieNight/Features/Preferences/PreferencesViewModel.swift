@@ -16,16 +16,27 @@ class PreferencesViewModel: ObservableObject {
 
     private var apiClient: APIClient?
     private var groupId: String?
+    private var memberId: String?
 
     var canSave: Bool {
         genreLikes.count >= 2
     }
 
-    func configure(apiClient: APIClient, groupId: String) {
+    func configure(apiClient: APIClient, groupId: String, memberId: String? = nil) {
         guard self.apiClient == nil else { return }
-        logger.info("configure: groupId=\(groupId)")
+        logger.info("configure: groupId=\(groupId), memberId=\(memberId ?? "self")")
         self.apiClient = apiClient
         self.groupId = groupId
+        self.memberId = memberId
+    }
+
+    private var preferencesPath: String {
+        guard let groupId else { return "" }
+        var path = "/groups/\(groupId)/preferences"
+        if let memberId {
+            path += "?member_id=\(memberId)"
+        }
+        return path
     }
 
     func loadPreferences() async {
@@ -37,7 +48,7 @@ class PreferencesViewModel: ObservableObject {
         isLoading = true
         error = nil
         do {
-            let prefs: Preference = try await apiClient.request("GET", path: "/groups/\(groupId)/preferences")
+            let prefs: Preference = try await apiClient.request("GET", path: preferencesPath)
             logger.info("loadPreferences: loaded \(prefs.genreLikes.count) likes")
             genreLikes = Set(prefs.genreLikes)
             genreDislikes = Set(prefs.genreDislikes)
@@ -77,7 +88,7 @@ class PreferencesViewModel: ObservableObject {
                 genreDislikes: Array(cleanDislikes).sorted(),
                 maxContentRating: maxContentRating.rawValue
             )
-            let _: Preference = try await apiClient.request("PUT", path: "/groups/\(groupId)/preferences", body: request)
+            let _: Preference = try await apiClient.request("PUT", path: preferencesPath, body: request)
             logger.info("savePreferences: success")
             genreDislikes = cleanDislikes
             savedSuccessfully = true

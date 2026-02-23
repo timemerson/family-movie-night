@@ -2,6 +2,7 @@ import SwiftUI
 
 struct VotingView: View {
     @ObservedObject var viewModel: VotingViewModel
+    @EnvironmentObject var profileSessionManager: ProfileSessionManager
     let roundId: String
     let currentUserId: String
     let isCreator: Bool
@@ -13,6 +14,18 @@ struct VotingView: View {
                 ProgressView("Loading round...")
             } else if let details = viewModel.roundDetails {
                 List {
+                    if profileSessionManager.isActingAsManaged {
+                        Section {
+                            ActiveProfileBanner(
+                                context: .voting,
+                                name: profileSessionManager.activeProfile.displayName,
+                                avatarKey: profileSessionManager.activeProfile.avatarKey
+                            )
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                        }
+                    }
+
                     if let progress = viewModel.voteProgress {
                         Section {
                             HStack {
