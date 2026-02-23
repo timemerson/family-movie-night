@@ -33,6 +33,8 @@ function getGroupService() {
 // POST /rounds/:round_id/votes — submit or change a vote
 votes.post("/rounds/:round_id/votes", async (c) => {
   const userId = c.get("userId");
+  const actingMemberId = c.get("actingMemberId");
+  const effectiveUserId = actingMemberId ?? userId;
   const roundId = c.req.param("round_id");
 
   const raw = await c.req.json();
@@ -47,7 +49,7 @@ votes.post("/rounds/:round_id/votes", async (c) => {
   const vote = await voteService.submitVote(
     roundId,
     parsed.data.tmdb_movie_id,
-    userId,
+    effectiveUserId,
     parsed.data.vote,
   );
 

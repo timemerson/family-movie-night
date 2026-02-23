@@ -4,7 +4,7 @@ import { GroupService } from "../services/group-service.js";
 import { InviteService } from "../services/invite-service.js";
 import { UserService } from "../services/user-service.js";
 import { getDocClient, tableName } from "../lib/dynamo.js";
-import { CreateGroupSchema, UpdateGroupSchema } from "../models/group.js";
+import { CreateGroupSchema, UpdateGroupSchema, CreateManagedMemberSchema } from "../models/group.js";
 import { ValidationError, ConflictError } from "../lib/errors.js";
 
 const groups = new Hono<AppEnv>();
@@ -111,6 +111,46 @@ groups.delete("/groups/:group_id/members/me", async (c) => {
 
   const groupService = getGroupService();
   await groupService.leaveGroup(groupId, userId);
+
+  return c.body(null, 204);
+});
+
+// POST /groups/:group_id/members/managed — create managed member (creator only)
+groups.post("/groups/:group_id/members/managed", async (c) => {
+  const userId = c.get("userId");
+  const groupId = c.req.param("group_id");
+
+  const body = await c.req.json();
+  const parsed = CreateManagedMemberSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.issues[0].message);
+  }
+
+  const groupService = getGroupService();
+  await groupService.requireCreator(groupId, userId);
+
+  const userService = getUserService();
+  const member = await groupService.addManagedMember(
+    groupId,
+    userId,
+    parsed.data.display_name,
+    parsed.data.avatar_key,
+    userService,
+  );
+
+  return c.json(member, 201);
+});
+
+// DELETE /groups/:group_id/members/:member_id — remove a member
+groups.delete("/groups/:group_id/members/:member_id", async (c) => {
+  const userId = c.get("userId");
+  const groupId = c.req.param("group_id");
+  const memberId = c.req.param("member_id");
+
+  const groupService = getGroupService();
+  const userService = getUserService();
+
+  await groupService.removeMember(groupId, memberId, userId, userService);
 
   return c.body(null, 204);
 });

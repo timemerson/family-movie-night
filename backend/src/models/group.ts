@@ -28,5 +28,11 @@ export const GroupMemberSchema = z.object({
 
 export type Group = z.infer<typeof GroupSchema>;
 export type GroupMember = z.infer<typeof GroupMemberSchema>;
+export const CreateManagedMemberSchema = z.object({
+  display_name: z.string().min(1).max(30),
+  avatar_key: z.string().min(1).max(50).optional().default("avatar_bear"),
+});
+
 export type CreateGroupInput = z.infer<typeof CreateGroupSchema>;
 export type UpdateGroupInput = z.infer<typeof UpdateGroupSchema>;
+export type CreateManagedMemberInput = z.infer<typeof CreateManagedMemberSchema>;

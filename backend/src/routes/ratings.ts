@@ -81,6 +81,8 @@ function getServices() {
 // POST /rounds/:round_id/ratings — submit a rating
 ratings.post("/rounds/:round_id/ratings", async (c) => {
   const userId = c.get("userId");
+  const actingMemberId = c.get("actingMemberId");
+  const effectiveUserId = actingMemberId ?? userId;
   const roundId = c.req.param("round_id");
 
   const raw = await c.req.json();
@@ -102,7 +104,7 @@ ratings.post("/rounds/:round_id/ratings", async (c) => {
 
   const rating = await ratingService.submitRating(
     roundId,
-    userId,
+    effectiveUserId,
     parsed.data.rating,
   );
 

@@ -4,6 +4,7 @@ import {
   DeleteCommand,
 } from "@aws-sdk/lib-dynamodb";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { randomUUID } from "node:crypto";
 import type { User } from "../models/user.js";
 
 export class UserService {
@@ -72,6 +73,50 @@ export class UserService {
       }
       throw err;
     }
+
+    return user;
+  }
+
+  async getUser(userId: string): Promise<User | null> {
+    const result = await this.docClient.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { user_id: userId },
+      }),
+    );
+    return (result.Item as User) ?? null;
+  }
+
+  async createManagedMember(
+    parentUserId: string,
+    displayName: string,
+    avatarKey: string = "avatar_bear",
+  ): Promise<User> {
+    const now = new Date().toISOString();
+    const userId = `managed_${randomUUID()}`;
+
+    const user: User = {
+      user_id: userId,
+      email: "",
+      display_name: displayName,
+      avatar_key: avatarKey,
+      created_at: now,
+      is_managed: true,
+      parent_user_id: parentUserId,
+      notification_prefs: {
+        vote_nudge: false,
+        pick_announce: false,
+        new_round: false,
+      },
+    };
+
+    await this.docClient.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: user,
+        ConditionExpression: "attribute_not_exists(user_id)",
+      }),
+    );
 
     return user;
   }
