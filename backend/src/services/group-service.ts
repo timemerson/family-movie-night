@@ -494,9 +494,15 @@ export class GroupService {
       }),
     );
 
-    // If managed member, also delete the synthetic user record
+    // If managed member, also delete the synthetic user record.
+    // Best-effort: if this fails, the orphaned user record is inert
+    // (no membership points to it) and will not affect functionality.
     if (targetMembership.member_type === "managed") {
-      await userService.deleteUser(memberId);
+      try {
+        await userService.deleteUser(memberId);
+      } catch {
+        // Orphaned managed user record — acceptable, no group membership remains
+      }
     }
   }
 

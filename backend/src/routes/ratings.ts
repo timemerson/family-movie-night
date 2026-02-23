@@ -101,6 +101,10 @@ ratings.post("/rounds/:round_id/ratings", async (c) => {
     throw new ValidationError("Round not found");
   }
   await groupService.requireMember(round.group_id, userId);
+  // When acting as a managed member, verify they are also in this group
+  if (effectiveUserId !== userId) {
+    await groupService.requireMember(round.group_id, effectiveUserId);
+  }
 
   const rating = await ratingService.submitRating(
     roundId,

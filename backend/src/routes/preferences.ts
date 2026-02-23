@@ -46,10 +46,9 @@ async function resolvePreferenceMemberId(
   }
 
   // Accessing another member's preferences — must be creator or parent
-  await groupService.requireMember(groupId, userId);
-  const callerMembership = await groupService.getMembership(groupId, userId);
+  const callerMembership = await groupService.requireMember(groupId, userId);
 
-  if (callerMembership?.role === "creator") {
+  if (callerMembership.role === "creator") {
     // Creator can manage any member's preferences
     await groupService.requireMember(groupId, effectiveId);
     return effectiveId;
