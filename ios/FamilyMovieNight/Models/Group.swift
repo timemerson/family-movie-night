@@ -67,6 +67,19 @@ struct AcceptInviteResponse: Codable {
     let role: String
 }
 
+struct CreateManagedMemberRequest: Codable {
+    let displayName: String
+    let avatarKey: String
+}
+
+struct CreateManagedMemberResponse: Codable {
+    let userId: String
+    let displayName: String
+    let avatarKey: String
+    let role: String
+    let memberType: String
+}
+
 struct InviteListResponse: Codable {
     let invites: [InviteSummary]
 }
