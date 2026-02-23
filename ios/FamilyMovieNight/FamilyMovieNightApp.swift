@@ -5,6 +5,9 @@ import AWSCognitoAuthPlugin
 @main
 struct FamilyMovieNightApp: App {
     @StateObject private var authService = AuthService()
+    @StateObject private var profileSessionManager = ProfileSessionManager(
+        authenticatedUser: .placeholder
+    )
 
     init() {
         do {
@@ -19,6 +22,7 @@ struct FamilyMovieNightApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(authService)
+                .environmentObject(profileSessionManager)
                 .task {
                     await authService.fetchSession()
                 }

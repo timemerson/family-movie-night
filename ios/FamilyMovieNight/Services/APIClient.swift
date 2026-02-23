@@ -1,17 +1,18 @@
 import Foundation
 
 class APIClient {
-    // TODO: Replace with actual API Gateway endpoint after deployment
     private let baseURL: URL
     private let authService: AuthService
+    private weak var profileSessionManager: ProfileSessionManager?
 
     var currentUserId: String {
         authService.userId ?? ""
     }
 
-    init(baseURL: URL, authService: AuthService) {
+    init(baseURL: URL, authService: AuthService, profileSessionManager: ProfileSessionManager? = nil) {
         self.baseURL = baseURL
         self.authService = authService
+        self.profileSessionManager = profileSessionManager
     }
 
     func request<T: Decodable>(_ method: String, path: String, body: Encodable? = nil) async throws -> T {
@@ -21,6 +22,10 @@ class APIClient {
 
         if let token = authService.accessToken {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        if let memberId = profileSessionManager?.actingAsMemberId {
+            urlRequest.setValue(memberId, forHTTPHeaderField: "X-Acting-As-Member")
         }
 
         if let body = body {
@@ -50,6 +55,10 @@ class APIClient {
 
         if let token = authService.accessToken {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        if let memberId = profileSessionManager?.actingAsMemberId {
+            urlRequest.setValue(memberId, forHTTPHeaderField: "X-Acting-As-Member")
         }
 
         let (_, response) = try await URLSession.shared.data(for: urlRequest)

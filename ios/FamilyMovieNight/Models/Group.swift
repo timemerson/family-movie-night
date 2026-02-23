@@ -1,6 +1,6 @@
 import Foundation
 
-struct Group: Codable, Identifiable {
+struct Group: Codable, Identifiable, Equatable {
     let groupId: String
     let name: String
     let createdBy: String
@@ -12,7 +12,7 @@ struct Group: Codable, Identifiable {
     var id: String { groupId }
 }
 
-struct GroupMember: Codable, Identifiable {
+struct GroupMember: Codable, Identifiable, Equatable {
     let userId: String
     let displayName: String
     let avatarKey: String

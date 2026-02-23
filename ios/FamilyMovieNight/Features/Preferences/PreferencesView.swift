@@ -2,11 +2,24 @@ import SwiftUI
 
 struct PreferencesView: View {
     @ObservedObject var viewModel: PreferencesViewModel
+    @EnvironmentObject var profileSessionManager: ProfileSessionManager
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
             Form {
+                if profileSessionManager.isActingAsManaged {
+                    Section {
+                        ActiveProfileBanner(
+                            context: .preferences,
+                            name: profileSessionManager.activeProfile.displayName,
+                            avatarKey: profileSessionManager.activeProfile.avatarKey
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
+                }
+
                 Section {
                     Picker("Max Content Rating", selection: $viewModel.maxContentRating) {
                         ForEach(ContentRating.allCases) { rating in
@@ -67,7 +80,10 @@ struct PreferencesView: View {
             .disabled(!viewModel.canSave || viewModel.isSaving)
             .padding()
         }
-        .navigationTitle("My Preferences")
+        .navigationTitle(profileSessionManager.isActingAsManaged
+            ? "\(profileSessionManager.activeProfile.displayName)'s Preferences"
+            : "My Preferences"
+        )
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.loadPreferences()

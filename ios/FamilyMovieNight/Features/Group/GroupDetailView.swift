@@ -3,6 +3,7 @@ import SwiftUI
 struct GroupDetailView: View {
     @ObservedObject var viewModel: GroupViewModel
     @Binding var navigationPath: NavigationPath
+    @EnvironmentObject var profileSessionManager: ProfileSessionManager
     @StateObject private var preferencesViewModel = PreferencesViewModel()
     @StateObject private var suggestionsViewModel = SuggestionsViewModel()
     @StateObject private var watchlistViewModel = WatchlistViewModel()
@@ -68,8 +69,20 @@ struct GroupDetailView: View {
                 }
 
                 Section {
-                    NavigationLink("My Preferences") {
+                    NavigationLink(profileSessionManager.isActingAsManaged
+                        ? "\(profileSessionManager.activeProfile.displayName)'s Preferences"
+                        : "My Preferences"
+                    ) {
                         PreferencesView(viewModel: preferencesViewModel)
+                            .onAppear {
+                                // Reconfigure with current memberId in case profile was switched
+                                if let apiClient = viewModel.apiClient, let group = viewModel.group {
+                                    let memberId = profileSessionManager.isActingAsManaged
+                                        ? profileSessionManager.activeProfile.memberId
+                                        : nil
+                                    preferencesViewModel.configure(apiClient: apiClient, groupId: group.groupId, memberId: memberId)
+                                }
+                            }
                     }
                 }
 
@@ -93,9 +106,11 @@ struct GroupDetailView: View {
                     }
                 }
 
-                Section {
-                    Button("Leave Group", role: .destructive) {
-                        showLeaveConfirmation = true
+                if !profileSessionManager.isActingAsManaged {
+                    Section {
+                        Button("Leave Group", role: .destructive) {
+                            showLeaveConfirmation = true
+                        }
                     }
                 }
             }
@@ -130,7 +145,7 @@ struct GroupDetailView: View {
                     VotingView(
                         viewModel: votingViewModel,
                         roundId: roundId,
-                        currentUserId: viewModel.currentUserId ?? "",
+                        currentUserId: profileSessionManager.activeProfile.memberId,
                         isCreator: isCreator
                     ) {
                         navigationPath.append(RoundFlowPhase.results(roundId))
@@ -164,7 +179,10 @@ struct GroupDetailView: View {
             }
             .onAppear {
                 if let apiClient = viewModel.apiClient {
-                    preferencesViewModel.configure(apiClient: apiClient, groupId: group.groupId)
+                    let memberId = profileSessionManager.isActingAsManaged
+                        ? profileSessionManager.activeProfile.memberId
+                        : nil
+                    preferencesViewModel.configure(apiClient: apiClient, groupId: group.groupId, memberId: memberId)
                     suggestionsViewModel.configure(apiClient: apiClient, groupId: group.groupId)
                     watchlistViewModel.configure(apiClient: apiClient, groupId: group.groupId)
                     votingViewModel.configure(apiClient: apiClient, groupId: group.groupId)

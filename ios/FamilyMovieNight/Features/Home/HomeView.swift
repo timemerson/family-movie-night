@@ -2,10 +2,12 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var profileSessionManager: ProfileSessionManager
     @StateObject private var groupViewModel = GroupViewModel()
 
     @State private var showCreateGroup = false
     @State private var showJoinGroup = false
+    @State private var showProfileSwitcher = false
     @State private var navigationPath = NavigationPath()
 
     var body: some View {
@@ -22,23 +24,63 @@ struct HomeView: View {
             .navigationTitle("Family Movie Night")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Sign Out") {
-                        Task { await authService.signOut() }
+                    if groupViewModel.group != nil {
+                        Button {
+                            showProfileSwitcher = true
+                        } label: {
+                            ProfileAvatarNavButton(activeProfile: profileSessionManager.activeProfile)
+                        }
+                    } else {
+                        Button("Sign Out") {
+                            profileSessionManager.resetToAuthenticatedUser()
+                            Task { await authService.signOut() }
+                        }
                     }
                 }
             }
         }
+        .sheet(isPresented: $showProfileSwitcher) {
+            ProfileSwitcherView(
+                loadState: profileSessionManager.managedProfiles.isEmpty ? .noManaged : .hasManaged,
+                householdName: groupViewModel.group?.name ?? "Family"
+            )
+            .environmentObject(profileSessionManager)
+        }
         .task {
             let client = APIClient(
                 baseURL: URL(string: "https://ikg34rhjk0.execute-api.us-east-1.amazonaws.com")!,
-                authService: authService
+                authService: authService,
+                profileSessionManager: profileSessionManager
             )
             groupViewModel.configure(
                 apiClient: client,
                 currentUserId: authService.userId ?? ""
             )
             await groupViewModel.loadMyGroup()
+
+            // Update profile session manager with loaded group data
+            updateProfileSessionManager()
         }
+        .onChange(of: groupViewModel.group) {
+            updateProfileSessionManager()
+        }
+    }
+
+    private func updateProfileSessionManager() {
+        guard let group = groupViewModel.group,
+              let currentUserId = groupViewModel.currentUserId else { return }
+
+        guard let authenticatedMember = group.members.first(where: { $0.userId == currentUserId }) else { return }
+
+        let authenticatedUser = SwitchableProfile.from(authenticatedMember, isAuthenticatedUser: true)
+        let managedMembers = group.members
+            .filter { $0.isManagedMember && $0.parentUserId == currentUserId }
+            .map { SwitchableProfile.from($0, isAuthenticatedUser: false) }
+
+        profileSessionManager.updateProfiles(
+            authenticatedUser: authenticatedUser,
+            managedMembers: managedMembers
+        )
     }
 
     private var noGroupView: some View {
