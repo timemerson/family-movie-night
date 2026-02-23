@@ -8,6 +8,7 @@ import SwiftUI
 struct SessionHistoryView: View {
     @StateObject var viewModel: SessionHistoryViewModel
     var groupId: String = "group_001"
+    var apiClient: APIClient?
 
     var body: some View {
         SwiftUI.Group {
@@ -26,7 +27,9 @@ struct SessionHistoryView: View {
         .navigationTitle("Watch History")
         .navigationBarTitleDisplayMode(.large)
         .task {
-            viewModel.configure(groupId: groupId)
+            if let apiClient {
+                viewModel.configure(apiClient: apiClient, groupId: groupId)
+            }
             if viewModel.sessions.isEmpty {
                 await viewModel.loadInitialPage()
             }
@@ -134,7 +137,10 @@ struct SessionHistoryView: View {
                 ForEach(viewModel.sessions) { session in
                     NavigationLink {
                         SessionDetailView(
-                            viewModel: .makePopulated(canRate: session.status == .watched)
+                            viewModel: SessionDetailViewModel(),
+                            apiClient: apiClient,
+                            roundId: session.roundId,
+                            groupId: groupId
                         )
                     } label: {
                         SessionHistoryRowView(session: session)

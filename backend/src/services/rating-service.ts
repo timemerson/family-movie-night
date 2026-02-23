@@ -2,6 +2,7 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { Rating, RatingValue } from "../models/rating.js";
@@ -29,6 +30,7 @@ export class RatingService {
     private readonly usersTable: string,
     private readonly roundService: RoundService,
     private readonly groupService: GroupService,
+    private readonly roundsTable: string = "",
   ) {}
 
   async submitRating(
@@ -65,7 +67,65 @@ export class RatingService {
       }),
     );
 
+    // Auto-transition to 'rated' when all attendees have rated
+    await this.checkAutoTransition(roundId, round);
+
     return item;
+  }
+
+  /**
+   * After a rating is submitted, check if all attendees have now rated.
+   * If so, automatically transition the round to 'rated' status.
+   */
+  private async checkAutoTransition(
+    roundId: string,
+    round: { group_id: string; status: string; attendees?: string[] | null },
+  ): Promise<void> {
+    // Only auto-transition from 'watched' status
+    if (round.status !== "watched") return;
+
+    const members = await this.groupService.getMembers(round.group_id);
+    const attendeeIds = round.attendees
+      ? new Set(round.attendees)
+      : new Set(members.map((m: any) => m.user_id));
+
+    // Get all ratings for this round
+    const ratingsResult = await this.docClient.send(
+      new QueryCommand({
+        TableName: this.ratingsTable,
+        KeyConditionExpression: "round_id = :rid",
+        ExpressionAttributeValues: { ":rid": roundId },
+      }),
+    );
+    const ratings = ratingsResult.Items ?? [];
+    const ratedMemberIds = new Set(ratings.map((r: any) => r.member_id));
+
+    // Check if every attendee has rated
+    const allRated = [...attendeeIds].every((id) => ratedMemberIds.has(id));
+    if (!allRated) return;
+
+    // Auto-transition: use the round service's transition with a system-level call
+    // We pass the started_by user as the actor — but transitionStatus requires creator role.
+    // Instead, do the update directly to avoid the creator check for auto-transitions.
+    try {
+      const now = new Date().toISOString();
+      await this.docClient.send(
+        new UpdateCommand({
+          TableName: this.roundsTable,
+          Key: { round_id: roundId },
+          UpdateExpression: "SET #s = :s, rated_at = :ts",
+          ConditionExpression: "#s = :expected",
+          ExpressionAttributeNames: { "#s": "status" },
+          ExpressionAttributeValues: {
+            ":s": "rated",
+            ":ts": now,
+            ":expected": "watched",
+          },
+        }),
+      );
+    } catch {
+      // Silently ignore — race condition or already transitioned
+    }
   }
 
   async getRatingsForSession(

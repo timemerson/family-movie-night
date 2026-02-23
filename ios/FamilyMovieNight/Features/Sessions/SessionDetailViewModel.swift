@@ -22,6 +22,10 @@ class SessionDetailViewModel: ObservableObject {
     private(set) var isCreator:         Bool = false
     private(set) var activeProfileName: String? = nil
 
+    // MARK: - Private
+
+    private var apiClient: APIClient?
+
     // MARK: - Derived
 
     var canRateNow: Bool {
@@ -41,12 +45,14 @@ class SessionDetailViewModel: ObservableObject {
     // MARK: - Configuration
 
     func configure(
+        apiClient:         APIClient?,
         roundId:           String,
         groupId:           String,
         activeMemberId:    String,
         isCreator:         Bool,
         activeProfileName: String?
     ) {
+        self.apiClient = apiClient
         self.roundId = roundId
         self.groupId = groupId
         self.activeMemberId = activeMemberId
@@ -54,29 +60,201 @@ class SessionDetailViewModel: ObservableObject {
         self.activeProfileName = activeProfileName
     }
 
-    // MARK: - API Operations (Fake — Dev Harness)
+    // MARK: - API Operations
 
     func loadAll() async {
         isLoadingRound = true
         isLoadingRatings = true
         error = nil
-        try? await Task.sleep(for: .milliseconds(800))
-        roundDetails = SampleData.sessionDetailData
-        ratingEntries = SampleData.allRatingEntries
-        isLoadingRound = false
-        isLoadingRatings = false
+
+        guard let apiClient else {
+            // Preview / dev harness mode
+            try? await Task.sleep(for: .milliseconds(800))
+            roundDetails = SampleData.sessionDetailData
+            ratingEntries = SampleData.allRatingEntries
+            isLoadingRound = false
+            isLoadingRatings = false
+            return
+        }
+
+        do {
+            // Load round details (GET /rounds/:id returns RoundWithDetails which we map to SessionDetailData)
+            let round: RoundDetailsForSession = try await apiClient.request(
+                "GET",
+                path: "/rounds/\(roundId)"
+            )
+            roundDetails = round.toSessionDetailData()
+            isLoadingRound = false
+        } catch let apiError as APIError {
+            isLoadingRound = false
+            isLoadingRatings = false
+            handleError(apiError)
+            return
+        } catch {
+            isLoadingRound = false
+            isLoadingRatings = false
+            self.error = "Couldn't load session details. Check your connection."
+            return
+        }
+
+        // Load ratings
+        await loadRatings()
     }
 
     func loadRatings() async {
+        guard let apiClient else {
+            // Preview / dev harness mode
+            try? await Task.sleep(for: .milliseconds(400))
+            ratingEntries = SampleData.ratingEntriesAllRated
+            isLoadingRatings = false
+            return
+        }
+
         isLoadingRatings = true
-        try? await Task.sleep(for: .milliseconds(400))
-        ratingEntries = SampleData.ratingEntriesAllRated
+
+        do {
+            let response: RatingsListResponse = try await apiClient.request(
+                "GET",
+                path: "/rounds/\(roundId)/ratings"
+            )
+            ratingEntries = response.ratings.map { entry in
+                RatingEntry(
+                    memberId:    entry.memberId,
+                    displayName: entry.displayName,
+                    avatarKey:   entry.avatarKey ?? "avatar_bear",
+                    rating:      entry.ratingValue,
+                    ratedAt:     nil
+                )
+            }
+        } catch {
+            // Silently fail ratings load — round details still visible
+        }
+
         isLoadingRatings = false
     }
 
     func refresh() async {
         await loadAll()
     }
+
+    // MARK: - Private
+
+    private func handleError(_ error: APIError) {
+        switch error {
+        case .httpError(let statusCode, _):
+            switch statusCode {
+            case 403: self.error = "You don't have access to this session."
+            case 404: self.error = "Session not found."
+            default:  self.error = "Something went wrong (\(statusCode))."
+            }
+        case .invalidResponse:
+            self.error = "Couldn't load session details. Check your connection."
+        }
+    }
+}
+
+// MARK: - RoundDetailsForSession (maps GET /rounds/:id response to SessionDetailData)
+
+/// Intermediate model to decode the GET /rounds/:id response and map it to SessionDetailData
+private struct RoundDetailsForSession: Decodable {
+    let roundId: String
+    let groupId: String
+    let status: String
+    let startedBy: String
+    let createdAt: String
+    let attendees: [String]?
+    let suggestions: [RoundSuggestionForSession]
+    let pick: RoundPickForSession?
+
+    func toSessionDetailData() -> SessionDetailData {
+        let sessionStatus = SessionStatus(rawValue: status) ?? .voting
+
+        // Build attendees from round.attendees (member IDs) — we use voter display names as fallback
+        let allVoterNames = Dictionary(
+            suggestions.flatMap { s in
+                s.voters.map { ($0.userId, $0.displayName) }
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        let attendeeList: [SessionAttendee]
+        if let ids = attendees {
+            attendeeList = ids.map { id in
+                SessionAttendee(
+                    memberId: id,
+                    displayName: allVoterNames[id] ?? id,
+                    avatarKey: nil
+                )
+            }
+        } else {
+            // No explicit attendees — derive from voters
+            let uniqueIds = Set(suggestions.flatMap { $0.voters.map { $0.userId } })
+            attendeeList = uniqueIds.map { id in
+                SessionAttendee(
+                    memberId: id,
+                    displayName: allVoterNames[id] ?? id,
+                    avatarKey: nil
+                )
+            }
+        }
+
+        let sessionSuggestions = suggestions.map { s in
+            SessionSuggestionItem(
+                tmdbMovieId: s.tmdbMovieId,
+                title: s.title,
+                year: s.year,
+                posterPath: s.posterPath,
+                contentRating: s.contentRating,
+                votesUp: s.votes.up,
+                votesDown: s.votes.down,
+                voters: s.voters.map { v in
+                    SuggestionVoter(
+                        memberId: v.userId,
+                        displayName: v.displayName,
+                        avatarKey: nil,
+                        vote: v.vote
+                    )
+                }
+            )
+        }
+
+        return SessionDetailData(
+            roundId: roundId,
+            groupId: groupId,
+            status: sessionStatus,
+            startedBy: startedBy,
+            attendees: attendeeList,
+            createdAt: createdAt,
+            suggestions: sessionSuggestions,
+            pickedMovieId: pick?.tmdbMovieId
+        )
+    }
+}
+
+private struct RoundSuggestionForSession: Decodable {
+    let tmdbMovieId: Int
+    let title: String
+    let year: Int
+    let posterPath: String?
+    let contentRating: String?
+    let votes: VoteCounts
+    let voters: [VoterInfo]
+
+    struct VoteCounts: Decodable {
+        let up: Int
+        let down: Int
+    }
+
+    struct VoterInfo: Decodable {
+        let userId: String
+        let displayName: String
+        let vote: String
+    }
+}
+
+private struct RoundPickForSession: Decodable {
+    let tmdbMovieId: Int
+    let title: String
 }
 
 // MARK: - Factory (Dev Menu)
@@ -93,6 +271,7 @@ extension SessionDetailViewModel {
     static func makePopulated(canRate: Bool = false) -> SessionDetailViewModel {
         let vm = SessionDetailViewModel()
         vm.configure(
+            apiClient: nil,
             roundId: "round_001",
             groupId: "group_001",
             activeMemberId: canRate ? "managed_max" : "user_tim",
@@ -122,6 +301,7 @@ extension SessionDetailViewModel {
         )
         let vm = SessionDetailViewModel()
         vm.configure(
+            apiClient: nil,
             roundId: "round_002",
             groupId: "group_001",
             activeMemberId: "managed_max",

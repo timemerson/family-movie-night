@@ -7,6 +7,10 @@ import SwiftUI
 
 struct SessionDetailView: View {
     @StateObject var viewModel: SessionDetailViewModel
+    @EnvironmentObject var profileSessionManager: ProfileSessionManager
+    var apiClient: APIClient?
+    var roundId: String = ""
+    var groupId: String = ""
     @State private var showRatingSheet = false
 
     private var navigationTitle: String {
@@ -29,6 +33,17 @@ struct SessionDetailView: View {
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            if viewModel.roundId.isEmpty {
+                viewModel.configure(
+                    apiClient: apiClient,
+                    roundId: roundId,
+                    groupId: groupId,
+                    activeMemberId: profileSessionManager.activeProfile.memberId,
+                    isCreator: false,
+                    activeProfileName: profileSessionManager.isActingAsManaged
+                        ? profileSessionManager.activeProfile.displayName : nil
+                )
+            }
             if viewModel.roundDetails == nil {
                 await viewModel.loadAll()
             }
@@ -40,7 +55,7 @@ struct SessionDetailView: View {
             Task { await viewModel.loadRatings() }
         }) {
             NavigationStack {
-                RatingView(viewModel: .makeUnrated())
+                RatingView(viewModel: makeRatingViewModel())
             }
         }
     }
@@ -242,6 +257,24 @@ struct SessionDetailView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func makeRatingViewModel() -> RatingViewModel {
+        let vm = RatingViewModel()
+        let pick = viewModel.pickedSuggestion
+        vm.configure(
+            roundId: viewModel.roundId,
+            activeMemberId: viewModel.activeMemberId,
+            isCreator: viewModel.isCreator,
+            activeProfileName: viewModel.activeProfileName,
+            movieTitle: pick?.title ?? "",
+            movieYear: pick?.year ?? 0,
+            movieContentRating: pick?.contentRating,
+            posterURL: pick?.posterURL,
+            apiClient: apiClient
+        )
+        vm.ratingEntries = viewModel.ratingEntries
+        return vm
     }
 
     private func sectionHeader(_ title: String) -> some View {

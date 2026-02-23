@@ -35,6 +35,7 @@ describe("RatingService", () => {
       "test-users",
       mockRoundService as any,
       mockGroupService as any,
+      "test-rounds",
     );
   });
 
@@ -46,6 +47,15 @@ describe("RatingService", () => {
         status: "watched",
       });
       mockSend.mockResolvedValueOnce({}); // PutCommand
+      // checkAutoTransition: getMembers
+      mockGroupService.getMembers.mockResolvedValueOnce([
+        { user_id: "user-1" },
+        { user_id: "user-2" },
+      ]);
+      // checkAutoTransition: QueryCommand for existing ratings
+      mockSend.mockResolvedValueOnce({
+        Items: [{ member_id: "user-1", rating: "loved" }],
+      });
 
       const result = await service.submitRating("round-1", "user-1", "loved");
 
@@ -53,7 +63,6 @@ describe("RatingService", () => {
       expect(result.member_id).toBe("user-1");
       expect(result.rating).toBe("loved");
       expect(result.rated_at).toBeDefined();
-      expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
     it("submits a rating when round is in selected status", async () => {
@@ -108,6 +117,15 @@ describe("RatingService", () => {
         status: "watched",
       });
       mockSend.mockResolvedValueOnce({}); // PutCommand (upsert)
+      // checkAutoTransition: getMembers
+      mockGroupService.getMembers.mockResolvedValueOnce([
+        { user_id: "user-1" },
+        { user_id: "user-2" },
+      ]);
+      // checkAutoTransition: QueryCommand for existing ratings
+      mockSend.mockResolvedValueOnce({
+        Items: [{ member_id: "user-1", rating: "did_not_like" }],
+      });
 
       const result = await service.submitRating(
         "round-1",
