@@ -81,6 +81,8 @@ function getServices() {
 // POST /rounds/:round_id/ratings — submit a rating
 ratings.post("/rounds/:round_id/ratings", async (c) => {
   const userId = c.get("userId");
+  const actingMemberId = c.get("actingMemberId");
+  const effectiveUserId = actingMemberId ?? userId;
   const roundId = c.req.param("round_id");
 
   const raw = await c.req.json();
@@ -99,10 +101,14 @@ ratings.post("/rounds/:round_id/ratings", async (c) => {
     throw new ValidationError("Round not found");
   }
   await groupService.requireMember(round.group_id, userId);
+  // When acting as a managed member, verify they are also in this group
+  if (effectiveUserId !== userId) {
+    await groupService.requireMember(round.group_id, effectiveUserId);
+  }
 
   const rating = await ratingService.submitRating(
     roundId,
-    userId,
+    effectiveUserId,
     parsed.data.rating,
   );
 

@@ -1,5 +1,6 @@
 import {
   GetCommand,
+  PutCommand,
   QueryCommand,
   UpdateCommand,
   DeleteCommand,
@@ -9,10 +10,12 @@ import {
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { randomUUID } from "node:crypto";
 import type { Group, GroupMember } from "../models/group.js";
+import type { UserService } from "./user-service.js";
 import {
   NotFoundError,
   ForbiddenError,
   ConflictError,
+  ValidationError,
 } from "../lib/errors.js";
 
 const MAX_GROUP_SIZE = 8;
@@ -358,6 +361,148 @@ export class GroupService {
           ],
         }),
       );
+    }
+  }
+
+  async addManagedMember(
+    groupId: string,
+    creatorUserId: string,
+    displayName: string,
+    avatarKey: string,
+    userService: UserService,
+  ): Promise<GroupMember & { display_name: string; avatar_key: string }> {
+    // Create managed user record
+    const managedUser = await userService.createManagedMember(
+      creatorUserId,
+      displayName,
+      avatarKey,
+    );
+
+    const now = new Date().toISOString();
+    const membership: GroupMember = {
+      group_id: groupId,
+      user_id: managedUser.user_id,
+      role: "member",
+      member_type: "managed",
+      joined_at: now,
+    };
+
+    try {
+      await this.docClient.send(
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Update: {
+                TableName: this.groupsTable,
+                Key: { group_id: groupId },
+                UpdateExpression: "SET member_count = member_count + :one",
+                ConditionExpression:
+                  "attribute_exists(group_id) AND member_count < :max",
+                ExpressionAttributeValues: {
+                  ":one": 1,
+                  ":max": MAX_GROUP_SIZE,
+                },
+              },
+            },
+            {
+              Put: {
+                TableName: this.membershipsTable,
+                Item: membership,
+                ConditionExpression:
+                  "attribute_not_exists(group_id) AND attribute_not_exists(user_id)",
+              },
+            },
+          ],
+        }),
+      );
+    } catch (err: unknown) {
+      // Clean up managed user if membership creation fails
+      await userService.deleteUser(managedUser.user_id);
+      if (
+        err instanceof Error &&
+        err.name === "TransactionCanceledException"
+      ) {
+        throw new ConflictError("Group is full (maximum 8 members)");
+      }
+      throw err;
+    }
+
+    return {
+      ...membership,
+      display_name: displayName,
+      avatar_key: avatarKey,
+    };
+  }
+
+  async removeMember(
+    groupId: string,
+    memberId: string,
+    callerUserId: string,
+    userService: UserService,
+  ): Promise<void> {
+    // Verify caller is a group member
+    const callerMembership = await this.getMembership(groupId, callerUserId);
+    if (!callerMembership) {
+      throw new ForbiddenError("Not a member of this group");
+    }
+
+    // Get target membership
+    const targetMembership = await this.getMembership(groupId, memberId);
+    if (!targetMembership) {
+      throw new NotFoundError("Member not found in this group");
+    }
+
+    // Permission check
+    if (targetMembership.member_type === "managed") {
+      // Managed members can be removed by: group creator OR their parent
+      const targetUser = await userService.getUser(memberId);
+      const isParent = targetUser?.parent_user_id === callerUserId;
+      const isCreator = callerMembership.role === "creator";
+      if (!isParent && !isCreator) {
+        throw new ForbiddenError("Cannot remove this managed member");
+      }
+    } else {
+      // Independent members: only self-remove or creator can remove
+      if (callerUserId !== memberId && callerMembership.role !== "creator") {
+        throw new ForbiddenError("Cannot remove other members");
+      }
+      // Creators cannot be removed via this endpoint — they must use leaveGroup
+      if (targetMembership.role === "creator") {
+        throw new ValidationError("Group creator must use the leave group endpoint");
+      }
+    }
+
+    // Delete membership + decrement member_count
+    await this.docClient.send(
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Delete: {
+              TableName: this.membershipsTable,
+              Key: { group_id: groupId, user_id: memberId },
+            },
+          },
+          {
+            Update: {
+              TableName: this.groupsTable,
+              Key: { group_id: groupId },
+              UpdateExpression: "SET member_count = member_count - :one",
+              ExpressionAttributeValues: { ":one": 1 },
+            },
+          },
+        ],
+      }),
+    );
+
+    // If managed member, also delete the synthetic user record.
+    // Best-effort: if this fails, the orphaned user record is inert
+    // (no membership points to it) and will not affect functionality.
+    if (targetMembership.member_type === "managed") {
+      try {
+        await userService.deleteUser(memberId);
+      } catch {
+        // Orphaned managed user record — acceptable, no group membership remains
+      }
     }
   }
 
