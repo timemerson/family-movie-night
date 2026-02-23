@@ -47,7 +47,7 @@ export class RoundService {
   async createRound(
     groupId: string,
     startedBy: string,
-    options?: { exclude_movie_ids?: number[]; include_watchlist?: boolean },
+    options?: { exclude_movie_ids?: number[]; include_watchlist?: boolean; attendees?: string[] },
   ): Promise<{
     round: Round;
     suggestions: RoundSuggestion[];
@@ -62,11 +62,24 @@ export class RoundService {
       throw err;
     }
 
-    // Generate suggestions via algorithm
+    // Validate attendees are group members (if provided)
+    const attendees = options?.attendees;
+    if (attendees && attendees.length > 0) {
+      const members = await this.groupService.getMembers(groupId);
+      const memberIds = new Set(members.map((m: any) => m.user_id));
+      const invalid = attendees.filter((a) => !memberIds.has(a));
+      if (invalid.length > 0) {
+        throw new ValidationError(
+          `Invalid attendees: ${invalid.join(", ")} are not members of this group`,
+        );
+      }
+    }
+
+    // Generate suggestions via algorithm (scoped to attendees if provided)
     const excludeIds = options?.exclude_movie_ids ?? [];
     let result: SuggestionsResult;
     try {
-      result = await this.suggestionService.getSuggestions(groupId, excludeIds);
+      result = await this.suggestionService.getSuggestions(groupId, excludeIds, attendees);
     } catch (e: any) {
       if (e.name === "ValidationError") {
         // Re-throw as 422 for insufficient preferences
@@ -118,6 +131,7 @@ export class RoundService {
       status: "voting",
       started_by: startedBy,
       created_at: now,
+      ...(attendees && attendees.length > 0 ? { attendees } : {}),
     };
 
     await this.docClient.send(
@@ -201,11 +215,14 @@ export class RoundService {
       voted_at: string;
     }>;
 
-    // Get members for vote progress + voter display names
+    // Get members for voter display names
     const members = await this.groupService.getMembers(round.group_id);
     const memberMap = new Map(
       members.map((m: any) => [m.user_id, m.display_name ?? m.user_id]),
     );
+
+    // Use attendees for vote progress denominator when present
+    const attendees = round.attendees;
 
     // Aggregate votes per suggestion
     const votesByMovie = new Map<number, typeof votes>();
@@ -215,8 +232,12 @@ export class RoundService {
       votesByMovie.set(v.tmdb_movie_id, arr);
     }
 
-    // Count unique voters
+    // Count unique voters (scoped to attendees if present)
     const uniqueVoters = new Set(votes.map((v) => v.user_id));
+    const voteTotal = attendees && attendees.length > 0 ? attendees.length : members.length;
+    const voteCount = attendees && attendees.length > 0
+      ? [...uniqueVoters].filter((v) => new Set(attendees).has(v)).length
+      : uniqueVoters.size;
 
     const suggestionsWithVotes: SuggestionWithVotes[] = suggestions.map((s) => {
       const movieVotes = votesByMovie.get(s.tmdb_movie_id) ?? [];
@@ -276,10 +297,11 @@ export class RoundService {
       started_by: round.started_by,
       created_at: round.created_at,
       closed_at: round.closed_at,
+      attendees: round.attendees ?? null,
       suggestions: suggestionsWithVotes,
       vote_progress: {
-        voted: uniqueVoters.size,
-        total: members.length,
+        voted: voteCount,
+        total: voteTotal,
       },
       pick,
     };

@@ -57,6 +57,13 @@ export class VoteService {
       throw new ForbiddenError("Not a member of this group");
     }
 
+    // If round has an attendees list, verify user is an attendee
+    if (round.attendees && round.attendees.length > 0) {
+      if (!round.attendees.includes(userId)) {
+        throw new ForbiddenError("You are not an attendee of this round");
+      }
+    }
+
     // Verify movie is in the round's suggestions
     const suggestionResult = await this.docClient.send(
       new GetCommand({
@@ -192,12 +199,24 @@ export class VoteService {
   async getVoteProgress(
     roundId: string,
     groupId: string,
+    attendees?: string[] | null,
   ): Promise<{ voted: number; total: number }> {
     // Get all votes to count unique voters
     const votes = await this.getVotesForRound(roundId);
     const uniqueVoters = new Set(votes.map((v) => v.user_id));
 
-    // Get member count
+    // Use attendees as denominator when present, otherwise fall back to all members
+    if (attendees && attendees.length > 0) {
+      // Only count voters who are in the attendees list
+      const attendeeSet = new Set(attendees);
+      const attendeeVoters = [...uniqueVoters].filter((v) => attendeeSet.has(v));
+      return {
+        voted: attendeeVoters.length,
+        total: attendees.length,
+      };
+    }
+
+    // Fallback: all group members
     const membersResult = await this.docClient.send(
       new QueryCommand({
         TableName: this.membershipsTable,

@@ -8,6 +8,7 @@ struct CreateRoundResponse: Codable {
     let status: String
     let startedBy: String
     let createdAt: String
+    let attendees: [String]?
     let suggestions: [RoundSuggestion]
     let watchlistEligibleCount: Int
     let relaxedConstraints: [String]
@@ -22,6 +23,7 @@ struct RoundDetails: Codable {
     let startedBy: String
     let createdAt: String
     let closedAt: String?
+    let attendees: [String]?
     let suggestions: [SuggestionWithVotes]
     let voteProgress: VoteProgress
     let pick: RoundPick?
@@ -160,6 +162,7 @@ struct PickResponse: Codable {
 struct CreateRoundRequest: Codable {
     let excludeMovieIds: [Int]
     let includeWatchlist: Bool
+    var attendees: [String]? = nil
 }
 
 struct SubmitVoteRequest: Codable {

@@ -314,7 +314,54 @@ describe("RoundService", () => {
       expect(mockSuggestionService.getSuggestions).toHaveBeenCalledWith(
         "g-1",
         [550, 680],
+        undefined,
       );
+    });
+
+    it("persists attendees on the round when provided", async () => {
+      // getActiveRound — no active rounds
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // getMembers for attendee validation
+      mockGroupService.getMembers.mockResolvedValueOnce([
+        { user_id: "user-1", display_name: "Alice", role: "creator" },
+        { user_id: "user-2", display_name: "Bob", role: "member" },
+        { user_id: "user-3", display_name: "Carol", role: "member" },
+      ]);
+      // PutCommand for round
+      mockSend.mockResolvedValueOnce({});
+      // Post-write recheck getActiveRound
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // PutCommand for each suggestion (2)
+      mockSend.mockResolvedValueOnce({});
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await service.createRound("g-1", "user-1", {
+        attendees: ["user-1", "user-2"],
+      });
+
+      expect(result.round.attendees).toEqual(["user-1", "user-2"]);
+      // Verify suggestions were scoped to attendees
+      expect(mockSuggestionService.getSuggestions).toHaveBeenCalledWith(
+        "g-1",
+        [],
+        ["user-1", "user-2"],
+      );
+    });
+
+    it("throws ValidationError for non-member attendees", async () => {
+      // getActiveRound — no active rounds
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // getMembers — only user-1 and user-2 exist
+      mockGroupService.getMembers.mockResolvedValueOnce([
+        { user_id: "user-1", display_name: "Alice", role: "creator" },
+        { user_id: "user-2", display_name: "Bob", role: "member" },
+      ]);
+
+      await expect(
+        service.createRound("g-1", "user-1", {
+          attendees: ["user-1", "user-99"],
+        }),
+      ).rejects.toThrow("Invalid attendees: user-99 are not members of this group");
     });
   });
 
