@@ -358,19 +358,39 @@ export class RoundService {
     return active ?? null;
   }
 
-  async getRoundsForGroup(groupId: string): Promise<Round[]> {
-    const result = await this.docClient.send(
-      new QueryCommand({
-        TableName: this.roundsTable,
-        IndexName: "group-rounds-index",
-        KeyConditionExpression: "group_id = :gid",
-        ExpressionAttributeValues: { ":gid": groupId },
-        ScanIndexForward: false,
-      }),
-    );
+  async getRoundsForGroup(
+    groupId: string,
+    options?: { limit?: number; cursor?: string },
+  ): Promise<{ rounds: Round[]; nextCursor: string | null }> {
+    const params: any = {
+      TableName: this.roundsTable,
+      IndexName: "group-rounds-index",
+      KeyConditionExpression: "group_id = :gid",
+      ExpressionAttributeValues: { ":gid": groupId },
+      ScanIndexForward: false,
+    };
 
-    const rounds = (result.Items ?? []) as Round[];
-    return rounds.map((r) => ({ ...r, status: normalizeStatus(r.status) }));
+    if (options?.limit) {
+      params.Limit = options.limit;
+    }
+    if (options?.cursor) {
+      params.ExclusiveStartKey = JSON.parse(
+        Buffer.from(options.cursor, "base64url").toString("utf8"),
+      );
+    }
+
+    const result = await this.docClient.send(new QueryCommand(params));
+
+    const rounds = ((result.Items ?? []) as Round[]).map((r) => ({
+      ...r,
+      status: normalizeStatus(r.status),
+    }));
+
+    const nextCursor = result.LastEvaluatedKey
+      ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString("base64url")
+      : null;
+
+    return { rounds, nextCursor };
   }
 
   async persistSuggestions(
@@ -478,14 +498,22 @@ export class RoundService {
     roundId: string,
     targetStatus: "watched" | "rated",
     userId: string,
+    options?: { system?: boolean },
   ): Promise<Round> {
     const round = await this.getRoundBasic(roundId);
     if (!round) {
       throw new NotFoundError("Round not found");
     }
 
-    // Validate membership
-    const member = await this.groupService.requireMember(round.group_id, userId);
+    if (!options?.system) {
+      // Validate membership
+      const member = await this.groupService.requireMember(round.group_id, userId);
+
+      // Only creator can close ratings
+      if (targetStatus === "rated" && member.role !== "creator") {
+        throw new ForbiddenError("Only the group creator can close ratings");
+      }
+    }
 
     // Validate transition
     const validTransitions: Record<string, string[]> = {
@@ -497,11 +525,6 @@ export class RoundService {
       throw new ConflictError(
         `Cannot transition from '${round.status}' to '${targetStatus}'`,
       );
-    }
-
-    // Only creator can close ratings
-    if (targetStatus === "rated" && member.role !== "creator") {
-      throw new ForbiddenError("Only the group creator can close ratings");
     }
 
     // Determine the expected source status for the atomic condition

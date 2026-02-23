@@ -86,7 +86,8 @@ struct GroupDetailView: View {
                         SessionHistoryView(
                             viewModel: sessionHistoryViewModel,
                             groupId: group.groupId,
-                            apiClient: viewModel.apiClient
+                            apiClient: viewModel.apiClient,
+                            isCreator: isCreator
                         )
                     } label: {
                         Label("Watch History", systemImage: "clock.arrow.circlepath")

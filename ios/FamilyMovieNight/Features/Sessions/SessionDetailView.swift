@@ -11,6 +11,7 @@ struct SessionDetailView: View {
     var apiClient: APIClient?
     var roundId: String = ""
     var groupId: String = ""
+    var isCreator: Bool = false
     @State private var showRatingSheet = false
 
     private var navigationTitle: String {
@@ -39,7 +40,7 @@ struct SessionDetailView: View {
                     roundId: roundId,
                     groupId: groupId,
                     activeMemberId: profileSessionManager.activeProfile.memberId,
-                    isCreator: false,
+                    isCreator: isCreator,
                     activeProfileName: profileSessionManager.isActingAsManaged
                         ? profileSessionManager.activeProfile.displayName : nil
                 )

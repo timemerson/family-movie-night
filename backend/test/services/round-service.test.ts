@@ -629,10 +629,10 @@ describe("RoundService", () => {
         ],
       });
 
-      const result = await service.getRoundsForGroup("g-1");
+      const { rounds } = await service.getRoundsForGroup("g-1");
 
-      expect(result[0].status).toBe("selected");
-      expect(result[1].status).toBe("voting");
+      expect(rounds[0].status).toBe("selected");
+      expect(rounds[1].status).toBe("voting");
     });
   });
 

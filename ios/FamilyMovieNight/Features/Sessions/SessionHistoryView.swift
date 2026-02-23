@@ -9,6 +9,7 @@ struct SessionHistoryView: View {
     @StateObject var viewModel: SessionHistoryViewModel
     var groupId: String = "group_001"
     var apiClient: APIClient?
+    var isCreator: Bool = false
 
     var body: some View {
         SwiftUI.Group {
@@ -140,7 +141,8 @@ struct SessionHistoryView: View {
                             viewModel: SessionDetailViewModel(),
                             apiClient: apiClient,
                             roundId: session.roundId,
-                            groupId: groupId
+                            groupId: groupId,
+                            isCreator: isCreator
                         )
                     } label: {
                         SessionHistoryRowView(session: session)

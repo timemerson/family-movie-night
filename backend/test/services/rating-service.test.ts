@@ -8,6 +8,7 @@ function createMockDocClient() {
 function createMockRoundService() {
   return {
     getRoundBasic: vi.fn(),
+    transitionStatus: vi.fn(),
   };
 }
 
@@ -35,7 +36,6 @@ describe("RatingService", () => {
       "test-users",
       mockRoundService as any,
       mockGroupService as any,
-      "test-rounds",
     );
   });
 
@@ -108,6 +108,74 @@ describe("RatingService", () => {
       await expect(
         service.submitRating("round-missing", "user-1", "loved"),
       ).rejects.toThrow("Round not found");
+    });
+
+    it("auto-transitions to rated when all attendees have rated", async () => {
+      mockRoundService.getRoundBasic.mockResolvedValueOnce({
+        round_id: "round-1",
+        group_id: "group-1",
+        status: "watched",
+      });
+      mockSend.mockResolvedValueOnce({}); // PutCommand
+      // checkAutoTransition: getMembers
+      mockGroupService.getMembers.mockResolvedValueOnce([
+        { user_id: "user-1" },
+        { user_id: "user-2" },
+      ]);
+      // checkAutoTransition: QueryCommand — both members have rated
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          { member_id: "user-1", rating: "loved" },
+          { member_id: "user-2", rating: "liked" },
+        ],
+      });
+      mockRoundService.transitionStatus.mockResolvedValueOnce({});
+
+      await service.submitRating("round-1", "user-2", "liked");
+
+      expect(mockRoundService.transitionStatus).toHaveBeenCalledWith(
+        "round-1",
+        "rated",
+        "",
+        { system: true },
+      );
+    });
+
+    it("does not auto-transition when not all attendees have rated", async () => {
+      mockRoundService.getRoundBasic.mockResolvedValueOnce({
+        round_id: "round-1",
+        group_id: "group-1",
+        status: "watched",
+      });
+      mockSend.mockResolvedValueOnce({}); // PutCommand
+      // checkAutoTransition: getMembers
+      mockGroupService.getMembers.mockResolvedValueOnce([
+        { user_id: "user-1" },
+        { user_id: "user-2" },
+      ]);
+      // checkAutoTransition: QueryCommand — only 1 of 2 rated
+      mockSend.mockResolvedValueOnce({
+        Items: [{ member_id: "user-1", rating: "loved" }],
+      });
+
+      await service.submitRating("round-1", "user-1", "loved");
+
+      expect(mockRoundService.transitionStatus).not.toHaveBeenCalled();
+    });
+
+    it("skips auto-transition when round is not in watched status", async () => {
+      mockRoundService.getRoundBasic.mockResolvedValueOnce({
+        round_id: "round-1",
+        group_id: "group-1",
+        status: "selected",
+      });
+      mockSend.mockResolvedValueOnce({}); // PutCommand
+
+      await service.submitRating("round-1", "user-1", "liked");
+
+      // checkAutoTransition should bail out immediately for non-watched status
+      expect(mockGroupService.getMembers).not.toHaveBeenCalled();
+      expect(mockRoundService.transitionStatus).not.toHaveBeenCalled();
     });
 
     it("allows upsert (changing a rating)", async () => {

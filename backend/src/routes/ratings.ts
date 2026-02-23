@@ -74,7 +74,6 @@ function getServices() {
     tableName("USERS"),
     roundService,
     groupService,
-    tableName("ROUNDS"),
   );
   return { groupService, roundService, ratingService };
 }

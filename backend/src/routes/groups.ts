@@ -242,10 +242,14 @@ groups.get("/groups/:group_id/sessions", async (c) => {
     docClient, tableName("ROUNDS"), tableName("SUGGESTIONS"), tableName("VOTES"), tableName("PICKS"),
     groupService, suggestionService, watchlistService, watchedService, pickService,
   );
-  const ratingService = new RatingService(docClient, tableName("RATINGS"), tableName("USERS"), roundService, groupService, tableName("ROUNDS"));
+  const ratingService = new RatingService(docClient, tableName("RATINGS"), tableName("USERS"), roundService, groupService);
 
-  // Get all rounds for the group (newest first)
-  const rounds = await roundService.getRoundsForGroup(groupId);
+  // Pagination: DynamoDB-level cursor + limit
+  const cursor = c.req.query("cursor") ?? undefined;
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "20", 10), 50);
+
+  // Query only the page of rounds we need (newest first)
+  const { rounds, nextCursor } = await roundService.getRoundsForGroup(groupId, { limit, cursor });
 
   // Get members for display names
   const members = await groupService.getMembers(groupId);
@@ -253,7 +257,7 @@ groups.get("/groups/:group_id/sessions", async (c) => {
     members.map((m: any) => [m.user_id, { display_name: m.display_name ?? m.user_id, avatar_key: m.avatar_key ?? "avatar_bear" }]),
   );
 
-  // Build session summaries
+  // Enrich only the page of rounds
   const sessions = await Promise.all(
     rounds.map(async (round) => {
       // Get pick info if exists
@@ -318,14 +322,7 @@ groups.get("/groups/:group_id/sessions", async (c) => {
     }),
   );
 
-  // Simple cursor-based pagination: use index into sorted array
-  const cursor = c.req.query("cursor");
-  const limit = Math.min(parseInt(c.req.query("limit") ?? "20", 10), 50);
-  const startIndex = cursor ? parseInt(cursor, 10) : 0;
-  const page = sessions.slice(startIndex, startIndex + limit);
-  const nextCursor = startIndex + limit < sessions.length ? String(startIndex + limit) : null;
-
-  return c.json({ sessions: page, next_cursor: nextCursor });
+  return c.json({ sessions, next_cursor: nextCursor });
 });
 
 // POST /invites/:invite_token/accept — accept invite and join group

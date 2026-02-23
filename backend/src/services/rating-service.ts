@@ -2,15 +2,12 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
-  UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { Rating, RatingValue } from "../models/rating.js";
 import type { GroupService } from "./group-service.js";
 import type { RoundService } from "./round-service.js";
 import {
-  ConflictError,
-  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from "../lib/errors.js";
@@ -30,7 +27,6 @@ export class RatingService {
     private readonly usersTable: string,
     private readonly roundService: RoundService,
     private readonly groupService: GroupService,
-    private readonly roundsTable: string = "",
   ) {}
 
   async submitRating(
@@ -104,25 +100,9 @@ export class RatingService {
     const allRated = [...attendeeIds].every((id) => ratedMemberIds.has(id));
     if (!allRated) return;
 
-    // Auto-transition: use the round service's transition with a system-level call
-    // We pass the started_by user as the actor — but transitionStatus requires creator role.
-    // Instead, do the update directly to avoid the creator check for auto-transitions.
+    // Auto-transition via round service with system flag to skip creator check
     try {
-      const now = new Date().toISOString();
-      await this.docClient.send(
-        new UpdateCommand({
-          TableName: this.roundsTable,
-          Key: { round_id: roundId },
-          UpdateExpression: "SET #s = :s, rated_at = :ts",
-          ConditionExpression: "#s = :expected",
-          ExpressionAttributeNames: { "#s": "status" },
-          ExpressionAttributeValues: {
-            ":s": "rated",
-            ":ts": now,
-            ":expected": "watched",
-          },
-        }),
-      );
+      await this.roundService.transitionStatus(roundId, "rated", "", { system: true });
     } catch {
       // Silently ignore — race condition or already transitioned
     }
