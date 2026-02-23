@@ -174,13 +174,93 @@ describe("Attendee-scoped features (Slice C2)", () => {
     });
   });
 
-  describe("Anyone-can-start (route-level)", () => {
-    it("POST /groups/:id/rounds uses requireMember, not requireCreator", async () => {
-      // This is a documentation test — the route handler at rounds.ts:85
-      // calls groupService.requireMember(), meaning any member can create a round.
-      // No requireCreator check exists on round creation.
-      // This test verifies the contract by reading the source (verified manually).
-      expect(true).toBe(true);
+  describe("VoteService.submitVote attendee enforcement", () => {
+    let mockSend: ReturnType<typeof vi.fn>;
+    let service: VoteService;
+
+    beforeEach(() => {
+      const client = createMockDocClient();
+      mockSend = client.send;
+      service = new VoteService(
+        client as any,
+        "test-votes",
+        "test-rounds",
+        "test-suggestions",
+        "test-memberships",
+      );
+    });
+
+    it("rejects vote from non-attendee when round has attendees", async () => {
+      // GetCommand for round — has attendees list
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          attendees: ["u1", "u2"],
+        },
+      });
+      // GetCommand for membership — user is a group member
+      mockSend.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "u3", role: "member" },
+      });
+
+      await expect(
+        service.submitVote("r-1", 550, "u3", "up"),
+      ).rejects.toThrow("You are not an attendee of this round");
+    });
+
+    it("allows vote from attendee when round has attendees", async () => {
+      // GetCommand for round
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+          attendees: ["u1", "u2"],
+        },
+      });
+      // GetCommand for membership
+      mockSend.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "u1", role: "member" },
+      });
+      // GetCommand for suggestion
+      mockSend.mockResolvedValueOnce({
+        Item: { round_id: "r-1", tmdb_movie_id: 550 },
+      });
+      // PutCommand for vote
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await service.submitVote("r-1", 550, "u1", "up");
+
+      expect(result.user_id).toBe("u1");
+      expect(result.vote).toBe("up");
+    });
+
+    it("allows vote from any member when round has no attendees", async () => {
+      // GetCommand for round — no attendees
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          round_id: "r-1",
+          group_id: "g-1",
+          status: "voting",
+        },
+      });
+      // GetCommand for membership
+      mockSend.mockResolvedValueOnce({
+        Item: { group_id: "g-1", user_id: "u5", role: "member" },
+      });
+      // GetCommand for suggestion
+      mockSend.mockResolvedValueOnce({
+        Item: { round_id: "r-1", tmdb_movie_id: 550 },
+      });
+      // PutCommand for vote
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await service.submitVote("r-1", 550, "u5", "down");
+
+      expect(result.user_id).toBe("u5");
+      expect(result.vote).toBe("down");
     });
   });
 });

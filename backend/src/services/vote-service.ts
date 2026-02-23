@@ -57,6 +57,13 @@ export class VoteService {
       throw new ForbiddenError("Not a member of this group");
     }
 
+    // If round has an attendees list, verify user is an attendee
+    if (round.attendees && round.attendees.length > 0) {
+      if (!round.attendees.includes(userId)) {
+        throw new ForbiddenError("You are not an attendee of this round");
+      }
+    }
+
     // Verify movie is in the round's suggestions
     const suggestionResult = await this.docClient.send(
       new GetCommand({

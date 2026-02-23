@@ -86,7 +86,7 @@ votes.get("/rounds/:round_id/results", async (c) => {
 
   const voteService = getVoteService();
   const results = await voteService.getRoundResults(roundId, memberNames);
-  const progress = await voteService.getVoteProgress(roundId, round.group_id);
+  const progress = await voteService.getVoteProgress(roundId, round.group_id, round.attendees);
 
   return c.json({
     round_id: roundId,
