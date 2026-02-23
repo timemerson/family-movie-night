@@ -79,7 +79,7 @@ describe("X-Acting-As-Member auth middleware", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { actingMemberId: string | null };
     expect(body.actingMemberId).toBe("managed_abc");
   });
 
@@ -166,7 +166,7 @@ describe("X-Acting-As-Member auth middleware", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { actingMemberId: string | null };
     expect(body.actingMemberId).toBeNull();
   });
 });
