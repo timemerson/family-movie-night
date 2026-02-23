@@ -32,6 +32,7 @@ struct HomeView: View {
                         }
                     } else {
                         Button("Sign Out") {
+                            profileSessionManager.resetToAuthenticatedUser()
                             Task { await authService.signOut() }
                         }
                     }
@@ -60,7 +61,7 @@ struct HomeView: View {
             // Update profile session manager with loaded group data
             updateProfileSessionManager()
         }
-        .onChange(of: groupViewModel.group?.members.count) {
+        .onChange(of: groupViewModel.group) {
             updateProfileSessionManager()
         }
     }

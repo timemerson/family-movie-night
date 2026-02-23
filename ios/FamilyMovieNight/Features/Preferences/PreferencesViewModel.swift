@@ -23,11 +23,20 @@ class PreferencesViewModel: ObservableObject {
     }
 
     func configure(apiClient: APIClient, groupId: String, memberId: String? = nil) {
-        guard self.apiClient == nil else { return }
+        let memberChanged = self.memberId != memberId
+        if self.apiClient != nil && !memberChanged { return }
         logger.info("configure: groupId=\(groupId), memberId=\(memberId ?? "self")")
         self.apiClient = apiClient
         self.groupId = groupId
         self.memberId = memberId
+        if memberChanged {
+            // Reset stale data so loadPreferences fetches fresh for new member
+            genreLikes = []
+            genreDislikes = []
+            maxContentRating = .pg13
+            error = nil
+            savedSuccessfully = false
+        }
     }
 
     private var preferencesPath: String {

@@ -74,6 +74,15 @@ struct GroupDetailView: View {
                         : "My Preferences"
                     ) {
                         PreferencesView(viewModel: preferencesViewModel)
+                            .onAppear {
+                                // Reconfigure with current memberId in case profile was switched
+                                if let apiClient = viewModel.apiClient, let group = viewModel.group {
+                                    let memberId = profileSessionManager.isActingAsManaged
+                                        ? profileSessionManager.activeProfile.memberId
+                                        : nil
+                                    preferencesViewModel.configure(apiClient: apiClient, groupId: group.groupId, memberId: memberId)
+                                }
+                            }
                     }
                 }
 
@@ -97,9 +106,11 @@ struct GroupDetailView: View {
                     }
                 }
 
-                Section {
-                    Button("Leave Group", role: .destructive) {
-                        showLeaveConfirmation = true
+                if !profileSessionManager.isActingAsManaged {
+                    Section {
+                        Button("Leave Group", role: .destructive) {
+                            showLeaveConfirmation = true
+                        }
                     }
                 }
             }
