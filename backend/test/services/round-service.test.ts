@@ -629,10 +629,53 @@ describe("RoundService", () => {
         ],
       });
 
-      const result = await service.getRoundsForGroup("g-1");
+      const { rounds } = await service.getRoundsForGroup("g-1");
 
-      expect(result[0].status).toBe("selected");
-      expect(result[1].status).toBe("voting");
+      expect(rounds[0].status).toBe("selected");
+      expect(rounds[1].status).toBe("voting");
+    });
+
+    it("returns nextCursor when DynamoDB returns LastEvaluatedKey", async () => {
+      const lastKey = { round_id: "r-1", group_id: "g-1" };
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          { round_id: "r-2", group_id: "g-1", status: "voting", created_at: "2026-02-21T20:00:00Z" },
+        ],
+        LastEvaluatedKey: lastKey,
+      });
+
+      const { rounds, nextCursor } = await service.getRoundsForGroup("g-1", { limit: 1 });
+
+      expect(rounds).toHaveLength(1);
+      expect(nextCursor).not.toBeNull();
+      // Cursor should be base64url-encoded JSON of the LastEvaluatedKey
+      const decoded = JSON.parse(Buffer.from(nextCursor!, "base64url").toString("utf8"));
+      expect(decoded).toEqual(lastKey);
+    });
+
+    it("returns null nextCursor when no more pages", async () => {
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          { round_id: "r-1", group_id: "g-1", status: "voting", created_at: "2026-02-20T20:00:00Z" },
+        ],
+      });
+
+      const { rounds, nextCursor } = await service.getRoundsForGroup("g-1");
+
+      expect(rounds).toHaveLength(1);
+      expect(nextCursor).toBeNull();
+    });
+
+    it("passes cursor as ExclusiveStartKey to DynamoDB", async () => {
+      const startKey = { round_id: "r-1", group_id: "g-1" };
+      const cursor = Buffer.from(JSON.stringify(startKey)).toString("base64url");
+      mockSend.mockResolvedValueOnce({ Items: [] });
+
+      await service.getRoundsForGroup("g-1", { limit: 10, cursor });
+
+      const queryParams = mockSend.mock.calls[0][0].input;
+      expect(queryParams.ExclusiveStartKey).toEqual(startKey);
+      expect(queryParams.Limit).toBe(10);
     });
   });
 
@@ -1003,6 +1046,22 @@ describe("RoundService", () => {
       await expect(
         service.transitionStatus("r-missing", "watched", "user-1"),
       ).rejects.toThrow("Round not found");
+    });
+
+    it("skips membership check when system flag is set", async () => {
+      mockSend.mockResolvedValueOnce({
+        Item: { round_id: "r-1", group_id: "g-1", status: "watched", created_at: "2026-02-20T20:00:00Z" },
+      });
+      mockSend.mockResolvedValueOnce({
+        Attributes: { round_id: "r-1", group_id: "g-1", status: "rated", created_at: "2026-02-20T20:00:00Z" },
+      });
+
+      // Pass empty userId — should succeed because system flag bypasses auth
+      const result = await service.transitionStatus("r-1", "rated", "", { system: true });
+
+      expect(result.status).toBe("rated");
+      // requireMember should NOT have been called
+      expect(mockGroupService.requireMember).not.toHaveBeenCalled();
     });
   });
 });

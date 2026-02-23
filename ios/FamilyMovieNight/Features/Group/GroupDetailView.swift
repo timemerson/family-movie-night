@@ -8,6 +8,7 @@ struct GroupDetailView: View {
     @StateObject private var suggestionsViewModel = SuggestionsViewModel()
     @StateObject private var watchlistViewModel = WatchlistViewModel()
     @StateObject private var votingViewModel = VotingViewModel()
+    @StateObject private var sessionHistoryViewModel = SessionHistoryViewModel()
     @State private var showShareSheet = false
     @State private var showLeaveConfirmation = false
     @State private var showAddManagedMember = false
@@ -79,6 +80,17 @@ struct GroupDetailView: View {
                         )
                     } label: {
                         Label("Watchlist", systemImage: "bookmark")
+                    }
+
+                    NavigationLink {
+                        SessionHistoryView(
+                            viewModel: sessionHistoryViewModel,
+                            groupId: group.groupId,
+                            apiClient: viewModel.apiClient,
+                            isCreator: isCreator
+                        )
+                    } label: {
+                        Label("Watch History", systemImage: "clock.arrow.circlepath")
                     }
                 }
 
@@ -222,6 +234,7 @@ struct GroupDetailView: View {
                     suggestionsViewModel.configure(apiClient: apiClient, groupId: group.groupId)
                     watchlistViewModel.configure(apiClient: apiClient, groupId: group.groupId)
                     votingViewModel.configure(apiClient: apiClient, groupId: group.groupId)
+                    sessionHistoryViewModel.configure(apiClient: apiClient, groupId: group.groupId)
                 }
             }
         }

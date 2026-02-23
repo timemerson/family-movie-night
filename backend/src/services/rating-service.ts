@@ -8,8 +8,6 @@ import type { Rating, RatingValue } from "../models/rating.js";
 import type { GroupService } from "./group-service.js";
 import type { RoundService } from "./round-service.js";
 import {
-  ConflictError,
-  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from "../lib/errors.js";
@@ -65,7 +63,49 @@ export class RatingService {
       }),
     );
 
+    // Auto-transition to 'rated' when all attendees have rated
+    await this.checkAutoTransition(roundId, round);
+
     return item;
+  }
+
+  /**
+   * After a rating is submitted, check if all attendees have now rated.
+   * If so, automatically transition the round to 'rated' status.
+   */
+  private async checkAutoTransition(
+    roundId: string,
+    round: { group_id: string; status: string; attendees?: string[] | null },
+  ): Promise<void> {
+    // Only auto-transition from 'watched' status
+    if (round.status !== "watched") return;
+
+    const members = await this.groupService.getMembers(round.group_id);
+    const attendeeIds = round.attendees
+      ? new Set(round.attendees)
+      : new Set(members.map((m: any) => m.user_id));
+
+    // Get all ratings for this round
+    const ratingsResult = await this.docClient.send(
+      new QueryCommand({
+        TableName: this.ratingsTable,
+        KeyConditionExpression: "round_id = :rid",
+        ExpressionAttributeValues: { ":rid": roundId },
+      }),
+    );
+    const ratings = ratingsResult.Items ?? [];
+    const ratedMemberIds = new Set(ratings.map((r: any) => r.member_id));
+
+    // Check if every attendee has rated
+    const allRated = [...attendeeIds].every((id) => ratedMemberIds.has(id));
+    if (!allRated) return;
+
+    // Auto-transition via round service with system flag to skip creator check
+    try {
+      await this.roundService.transitionStatus(roundId, "rated", "", { system: true });
+    } catch {
+      // Silently ignore — race condition or already transitioned
+    }
   }
 
   async getRatingsForSession(
