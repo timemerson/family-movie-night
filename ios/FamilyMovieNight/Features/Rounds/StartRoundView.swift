@@ -3,7 +3,7 @@ import SwiftUI
 struct StartRoundView: View {
     @ObservedObject var viewModel: VotingViewModel
     let groupId: String
-    let isCreator: Bool
+    let attendees: [String]
     var onRoundStarted: ((String) -> Void)?
 
     @State private var includeWatchlist = true
@@ -31,7 +31,10 @@ struct StartRoundView: View {
             } else {
                 Button {
                     Task {
-                        if let roundId = await viewModel.createRound(includeWatchlist: includeWatchlist) {
+                        if let roundId = await viewModel.createRound(
+                            includeWatchlist: includeWatchlist,
+                            attendees: attendees
+                        ) {
                             onRoundStarted?(roundId)
                         }
                     }
@@ -42,13 +45,6 @@ struct StartRoundView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .padding(.horizontal, 32)
-                .disabled(!isCreator)
-            }
-
-            if !isCreator {
-                Text("Only the group creator can start a round.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             if let error = viewModel.error {
