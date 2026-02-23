@@ -14,7 +14,8 @@ struct GroupDetailView: View {
 
     enum RoundFlowPhase: Hashable {
         case idle
-        case start
+        case attendeeSelection
+        case start([String])
         case voting(String)
         case results(String)
         case picked
@@ -56,7 +57,7 @@ struct GroupDetailView: View {
                 }
 
                 Section {
-                    NavigationLink(value: RoundFlowPhase.start) {
+                    NavigationLink(value: RoundFlowPhase.attendeeSelection) {
                         Label("Pick Tonight's Movie", systemImage: "film.stack")
                     }
                     .bold()
@@ -158,11 +159,21 @@ struct GroupDetailView: View {
             }
             .navigationDestination(for: RoundFlowPhase.self) { phase in
                 switch phase {
-                case .start:
+                case .attendeeSelection:
+                    AttendeeSelectionView(
+                        viewModel: AttendeeSelectionViewModel(
+                            members: group.members,
+                            activeUserId: profileSessionManager.activeProfile.memberId,
+                            groupId: group.groupId
+                        )
+                    ) { selectedIds in
+                        navigationPath.append(RoundFlowPhase.start(selectedIds))
+                    }
+                case .start(let attendees):
                     StartRoundView(
                         viewModel: votingViewModel,
                         groupId: group.groupId,
-                        isCreator: isCreator
+                        attendees: attendees
                     ) { roundId in
                         navigationPath.append(RoundFlowPhase.voting(roundId))
                     }

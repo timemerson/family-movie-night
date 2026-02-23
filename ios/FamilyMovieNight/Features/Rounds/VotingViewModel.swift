@@ -33,7 +33,7 @@ class VotingViewModel: ObservableObject {
 
     // MARK: - Create Round
 
-    func createRound(excludeMovieIds: [Int] = [], includeWatchlist: Bool = false) async -> String? {
+    func createRound(excludeMovieIds: [Int] = [], includeWatchlist: Bool = false, attendees: [String]? = nil) async -> String? {
         guard let apiClient, let groupId else { return nil }
         isLoading = true
         error = nil
@@ -41,7 +41,8 @@ class VotingViewModel: ObservableObject {
         do {
             let request = CreateRoundRequest(
                 excludeMovieIds: excludeMovieIds,
-                includeWatchlist: includeWatchlist
+                includeWatchlist: includeWatchlist,
+                attendees: attendees
             )
             let response: CreateRoundResponse = try await apiClient.request(
                 "POST",
